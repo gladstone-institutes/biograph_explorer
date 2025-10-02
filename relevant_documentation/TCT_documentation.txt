@@ -1,0 +1,2747 @@
+https://github.com/NCATSTranslator/Translator_component_toolkit/tree/main
+
+================================================
+FILE: README.md
+================================================
+Introduction
+==================================
+
+## What is TCT?
+Translator Component Toolkit is a python library that allowing users to explore and use KGs in the Translator ecosystem.
+Users can check out the key function documentations here: https://ncatstranslator.github.io/Translator_component_toolkit/ 
+
+## Key features for TCT
+Allowing users to select APIs, predicates according to the user's intention. <br>
+Parallel and fast querying of the selected APIs.<br>
+Providing reproducible results by setting constraints.<br>
+Allowing testing whether a user defined API follows a [TRAPI](https://github.com/NCATSTranslator/ReasonerAPI) standard or not. <br>
+Faciliting to explore knowledge graphs from both Translator ecosystem and user defined APIs.<br>
+Connecting large language models to convert user's questions into TRAPI queries. <br>
+
+## How to use TCT
+
+### Install Requirements
+
+To install TCT as a python library:
+
+```bash
+pip install TCT
+```
+
+This the recommended approach for installation. 
+
+
+#### Development Installation
+
+The TCT is continuously updated, if you would like to use the latest functions, you can clone this repository and install it in development mode:
+
+**Using UV (recommended for development):**
+```bash
+git clone https://github.com/NCATSTranslator/Translator_component_toolkit.git
+cd Translator_component_toolkit
+uv sync
+```
+
+**Using pip:**
+```bash
+git clone https://github.com/NCATSTranslator/Translator_component_toolkit.git
+cd Translator_component_toolkit
+pip install -e .
+```
+
+#### Building and Deployment
+
+**Using UV:**
+- Build: `uv build`
+- Install dependencies: `uv sync`
+- Run in UV environment: `uv run python your_script.py`
+
+**Using pip:**
+- Build: `python -m build`
+- Install dependencies: `pip install -e .`
+
+
+### Please follow the example notebooks (four utilities) below to explore the Translator APIs.
+
+#### KG overview
+Explore different KGs **[KG overview](https://github.com/gloriachin/Translator_component_toolkit/tree/main/notebooks/overview_of_KGs.ipynb)**
+
+#### Connection finder
+Example notebook for **[ConnectionFinder](https://github.com/gloriachin/Translator_component_toolkit/tree/main/notebooks/Connection_finder.ipynb)**
+
+#### Path finder
+Example notebook for **[PathFinder](https://github.com/gloriachin/Translator_component_toolkit/tree/main/notebooks/Path_finder.ipynb)**
+
+#### Network finder
+Example notebook for **[NetworkFinder](https://github.com/gloriachin/Translator_component_toolkit/tree/main/notebooks/Network_finder.ipynb)**
+
+#### Translate users' questions into TRAPI queries
+Example notebook for translating users' questions into TRAPI queries can be found [here](https://github.com/gloriachin/Translator_component_toolkit/tree/main/notebooks/Question2Query_chatGPT.ipynb). 
+
+#### Connecting to a user's API
+API should be developed following the standard from [TRAPI](https://github.com/NCATSTranslator/ReasonerAPI). <br>
+An example notebook for add a user's API can be found [here](https://github.com/gloriachin/Translator_component_toolkit/tree/main/notebooks/Connecting_userAPI.ipynb).<br>
+**Warning: It does not work if no user' API is established**<br>
+
+## Key Translator components
+Connecting to key Translator components can be found [here](https://github.com/gloriachin/Translator_component_toolkit/tree/main/TranslatorComponentsIntroduction.md)
+
+### Contributing
+TCT is a tool that helps to explore knowledge graphs developed in the Biomedical Data Translator Consortium. Consortium members and external contributors are encouraged to submit issues and pull requests. 
+
+### Contact info
+Guangrong Qin, guangrong.qin@isbscience.org
+
+
+
+================================================
+FILE: main.py
+================================================
+from TCT.server import mcp
+
+def main():
+    """Entry point for tct-server script"""
+    mcp.run()
+
+if __name__ == "__main__":
+    main()
+
+
+================================================
+FILE: Makefile
+================================================
+.PHONY: test spell spell-fix lint lint-fix lint-notebooks format check install
+
+# Install development dependencies
+install:
+	uv sync --dev
+
+# Run tests with coverage
+test:
+	uv run pytest || test $$? -eq 5
+
+# Run spell checking
+spell:
+	uv run codespell --skip=metaData,notebooks,htmlcov --ignore-words-list=EHR
+
+# Run spell checking interactively (allows fixing)
+spell-fix:
+	uv run codespell --interactive 3 --skip=metaData,notebooks,htmlcov --ignore-words-list=EHR
+
+# Run linting
+lint:
+	uv run ruff check .
+
+# Run linting with automatic fixes
+lint-fix:
+	uv run ruff check . --fix
+
+# Run linting on notebooks only
+lint-notebooks:
+	uv run ruff check notebooks/ || true
+
+# Run code formatting
+format:
+	uv run ruff format .
+
+# Run all checks (lint, spell, test)
+check: lint spell test
+
+# Help target
+help:
+	@echo "Available targets:"
+	@echo "  install  - Install development dependencies"
+	@echo "  test     - Run tests with coverage"
+	@echo "  spell    - Run spell checking"
+	@echo "  spell-fix - Run interactive spell checking (allows fixing)"
+	@echo "  lint     - Run code linting"
+	@echo "  lint-fix - Run code linting with automatic fixes"
+	@echo "  lint-notebooks - Run code linting on notebooks (informational)"
+	@echo "  format   - Format code"
+	@echo "  check    - Run all checks (lint, spell, test)"
+	@echo "  help     - Show this help message"
+
+
+================================================
+FILE: pyproject.toml
+================================================
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "TCT"
+version = "0.1.4"
+description = "Translator Component Toolkit"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Guangrong Qin, Yue Zhang, Sierra Moxon", email = "guangrong.qin@isbscience.org"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "requests",
+    "jsons",
+    "pandas",
+    "seaborn",
+    "matplotlib",
+    "ipycytoscape",
+    "networkx",
+    "numpy",
+    "openai",
+    "ipykernel",
+    "fastmcp>=2.12.2",
+    "click>=8.2.1",
+]
+
+[project.scripts]
+tct-server = "main:main"
+
+[project.urls]
+Homepage = "https://github.com/NCATSTranslator/Translator_component_toolkit"
+Documentation = "https://ncatstranslator.github.io/Translator_component_toolkit/"
+Repository = "https://github.com/NCATSTranslator/Translator_component_toolkit"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+    "codespell>=2.2.0",
+    "mypy>=1.14.1",
+]
+
+[tool.uv.sources]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--cov=TCT",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml",
+    "--cov-fail-under=0",
+    "--tb=short",
+    "-v"
+]
+
+[tool.ruff]
+exclude = ["notebooks/"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["TCT"]
+
+
+
+================================================
+FILE: requirements.txt
+================================================
+requests
+jsons
+pandas
+seaborn
+matplotlib
+ipycytoscape
+networkx
+openai
+ipykernel
+PyYAML
+ipywidgets
+
+
+
+================================================
+FILE: setup.py
+================================================
+from setuptools import setup, find_packages
+
+setup(
+    name='TCT',
+    version='0.1.3',
+    packages=find_packages(),
+    install_requires=[
+        # List your library's dependencies here
+        'requests',
+        'pandas',
+        'seaborn',
+        'matplotlib',
+        'ipycytoscape',
+        'networkx',
+        'numpy',
+        'openai',
+        'PyYAML',
+    ],
+    entry_points={
+        'console_scripts': [
+            # Define any command-line scripts here
+        ],
+    },
+    url='https://github.com/NCATSTranslator/Translator_component_toolkit',
+    author='Guangrong Qin',
+    author_email='guangrong.qin@isbscience.org',
+    description='Translator Component Toolkit',
+    long_description=open('README.md').read(),
+    long_description_content_type='text/markdown',
+    license='MIT',
+)
+
+
+
+================================================
+FILE: TranslatorComponentsIntroduction.md
+================================================
+Translator Components
+=====================
+
+## Introduction
+
+Translator is a National Center for Advancing Translational Sciences (NCATS) program that aims to accelerate the process of translating basic scientific discoveries into new therapies.
+TCT is a Python package that provides a set of tools for building and managing Translator components.
+TCT is designed to be used by developers who want to build components that can be used in the Translator ecosystem.
+If you would like to direct interact with the Translator UI, please visit https://ui.transltr.io/
+
+## Key components
+
+In the translator ecosystem, there are several groups of components that can be used for standaradization, Translator standard API development, reasoning, and visualization.
+
+### Translator Component Toolkit (TCT)
+
+A python library and related jupyter notebooks for users to explore the APIs in Translator with functionalities for pathfinder etc. It would be useful for developers or computational biologists who would like to build their own use cases using the resources in the Translator ecosystem. Key functions currently available include 1) Neighborhood finding: to explore anything that is connected to an entity of interest;  2) PathFinder: to find the intermediate nodes between two entities; 3) Network annotation: to find the interactions among the entities of interest. 
+
+TCT link: https://github.com/NCATSTranslator/Translator_component_toolkit. 
+
+### Biolink
+
+- Tree-viz-biolink: https://biolink.github.io/biolink-model/categories.html
+- Biolink repo: https://biolink.github.io/biolink-model/
+- Biolink Model Toolkit (BMT): A python library for working with the biolink-model.
+- BMT codebase: https://github.com/biolink/biolink-model-toolkit 
+- Latest release: https://pypi.org/project/bmt/ 
+
+--------------------------------------------------------------------------------------------------
+
+###  Knowledge source related:
+
+**KGX_format:** KGX is a format for distributing Biolink-compliant knowledge graphs. 
+
+**KGXTool:** The translator team also developed a KGX tool that allows transforming KGs from one graph formalism to another, creating KGs or subgraphs, merging two or more KGs, validating KG against the Biolink Model etc. 
+
+**KGXTool link:** https://github.com/biolink/kgx/blob/master/README.md
+
+**KGhub:** KGhub is a resource that hosts a number of KGX formatted biomedical knowledge graphs. 
+
+**KGhub link:** https://kghub.org/kg-registry/
+
+----------------------------------------------------------------------------------------------------
+
+### Translator API standard (TRAPI)
+
+**TRAPI standard:** A data model and API definition that enables query by graph template and responses by graph and ranked results. It will be useful for anyone who 1) wants to write code that queries existing Translator components; 2) build a KP/tool that integrates into the Translator ecosystem; 3) reuse a carefully thought out schema for other projects that aim to pose/answer biomedical questions via graph template. 
+
+**TRAPI standard repo:** https://github.com/NCATSTranslator/ReasonerAPI. 
+
+----------------------------------------------------------------------------------------------------
+
+#### TRAPI validator:
+
+A python library of methods to validate TRAPI and Biolink Model compliance of biomedical data processing software. It would be useful for developers of Biolink Model components accessed using TRAPI web services. Key functions include: given a TRAPI response (or comparable knowledge query inputs), validates compliance to TRAPI and Biolink Model standards (current release or user specified releases of the standards). 
+
+**TRAPI validator link:** https://github.com/NCATSTranslator/reasoner-validator
+
+----------------------------------------------------------------------------------------------------
+
+#### Translator APIs:
+Translator KG APIs are a set of APIs that follows the TRAPI standard and biolink standard to explore underline biomedical knowledge graphs. 
+
+Link: https://smart-api.info/registry/translator?tags=translator&tags.name=TRAPI
+
+----------------------------------------------------------------------------------------------------
+#### Translator API deployment tool:
+
+**Plover description:** an in-memory knowledge graph database server system, built for Translator. Potential users include knowledge providers (who might use PloverDB to host a KP); ARAs (who can programmatically access KPs hosted in PloverDB); other application developers. Key functions: /query, /meta_knowledge_graph, /sri_test_triples, /code_version, /logs. 
+
+**Plover link:** https://github.com/RTXteam/PloverDB
+
+#### knowledge graph node normalization:
+
+**NodeNorm description:** An API based tool to normalize identifiers (such as genes, diseases, drugs). The potential users include anybody who wants to translate different identifier systems into a single consistent set of identifiers, such as bioinformaticians.  
+
+**NodeNorm Links:** https://nodenorm.transltr.io/docs (Translator Prod); https://nodenormalization-sri.renci.org/docs (RENCI Dev).
+
+----------------------------------------------------------------------------------------------------
+**Name Resolver:** An API for named entity linker for Translator. It allows a user to look up possible CURIEs for biomedical terms. It will be useful for anybody who would like to look up a CURIE for biomedical concepts. 
+
+**NameRes Link:** https://name-lookup.transltr.io/ (Translator Prod); https://name-resolution-sri.renci.org/docs (RENCI Dev). 
+
+----------------------------------------------------------------------------------------------------
+
+##### To be continued
+
+
+
+================================================
+FILE: .codespellignore
+================================================
+# Codespell ignore file
+# Add words that should be ignored by codespell here
+# One word per line
+
+# Common technical terms that might be flagged
+nd
+
+
+================================================
+FILE: docs/Makefile
+================================================
+# Minimal makefile for Sphinx documentation
+#
+
+# You can set these variables from the command line, and also
+# from the environment for the first two.
+SPHINXOPTS    ?=
+SPHINXBUILD   ?= sphinx-build
+SOURCEDIR     = source
+BUILDDIR      = build
+
+# Put it first so that "make" without argument is like "make help".
+help:
+	@$(SPHINXBUILD) -M help "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+
+.PHONY: help Makefile
+
+# Catch-all target: route all unknown targets to Sphinx using the new
+# "make mode" option.  $(O) is meant as a shortcut for $(SPHINXOPTS).
+%: Makefile
+	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+
+
+
+================================================
+FILE: docs/requirements.txt
+================================================
+furo
+sphinx
+myst-parser
+numpydoc
+sphinx_markdown_builder
+standard-imghdr
+
+
+
+================================================
+FILE: docs/source/readme.rst
+================================================
+.. include:: ../../README.md
+   :parser: myst_parser.sphinx_
+
+
+
+================================================
+FILE: docs/source/components.rst
+================================================
+.. include:: ../../TranslatorComponentsIntroduction.md
+   :parser: myst_parser.sphinx_
+
+
+
+================================================
+FILE: docs/source/conf.py
+================================================
+# Configuration file for the Sphinx documentation builder.
+#
+# For the full list of built-in configuration values, see the documentation:
+# https://www.sphinx-doc.org/en/master/usage/configuration.html
+
+# -- Project information -----------------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
+
+
+project = 'Translator Component Toolkit'
+copyright = '2025, Guangrong Qin, Yue Zhang'
+author = 'Guangrong Qin, Yue Zhang'
+release = '0.1'
+
+# -- General configuration ---------------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
+
+extensions = ['numpydoc',
+        'sphinx.ext.doctest',
+        'sphinx.ext.autodoc',
+        'sphinx.ext.autosummary',
+        'sphinx.ext.viewcode',
+        'myst_parser']
+
+source_suffix = {
+    '.rst': 'restructuredtext',
+    '.txt': 'markdown',
+    '.md': 'markdown',
+}
+
+templates_path = ['_templates']
+exclude_patterns = []
+
+
+
+# -- Options for HTML output -------------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
+
+html_theme = 'alabaster'
+html_static_path = ['_static']
+
+
+
+================================================
+FILE: docs/source/index.rst
+================================================
+.. Translator Component Toolkit documentation master file, created by
+   sphinx-quickstart on Thu Jun 26 13:22:44 2025.
+   You can adapt this file completely to your liking, but it should at least
+   contain the root `toctree` directive.
+
+Welcome to Translator Component Toolkit's documentation!
+========================================================
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Contents:
+
+   intro
+   components
+   name_resolver
+   node_normalizer
+   translator_kpinfo
+   translator_metakg
+   translator_query
+   translator_node
+   TCT
+
+Indices and tables
+==================
+
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`
+
+
+
+================================================
+FILE: docs/source/intro.md
+================================================
+Introduction
+============
+## What is TCT?
+Translator Component Toolkit is a python library that allowing users to explore and use KGs in the Translator ecosystems.
+Users can check out the key functions here: https://ncatstranslator.github.io/Translator_component_toolkit/ 
+
+## Key features for TCT
+Allowing users to select APIs, predicates according to the user's intention. <br>
+Parallel and fast querying of the selected APIs.<br>
+Providing reproducible results by setting constraints.<br>
+Allowing testing whether a user defined API follows a [TRAPI](https://github.com/NCATSTranslator/ReasonerAPI) standard or not. <br>
+Faciliting to explore knowledge graphs from both Translator ecosystem and user defined APIs.<br>
+Connecting large language models to convert user's questions into TRAPI queries. <br>
+
+### Contributing
+TCT is a tool that helps to explore knowledge graphs developed in the Biomedical Data Translator Consortium. Consortium members and external contributors are encouraged to submit issues and pull requests. 
+
+### Contact info
+Guangrong Qin, guangrong.qin@isbscience.org
+
+## How to use TCT
+### Install Requirements
+
+To install TCT as a python library, you can install the library using `pip install TCT` from the command line. The current released version is TCT.0.1.1. This the recommended approach for installation. 
+
+The TCT is continuously updated, if you would like to use the latest functions, you can also  clone this repository, and then run `pip install -e .` from this folder.
+
+### Please follow the example notebooks (four utilities) below to explore the Translator APIs.
+
+#### KG overview
+Explore different KGs **[KG overview](https://github.com/gloriachin/Translator_component_toolkit/tree/main/notebooks/overview_of_KGs.ipynb)**
+
+#### Connection finder
+Example notebook for **[ConnectionFinder](https://github.com/gloriachin/Translator_component_toolkit/tree/main/notebooks/Connection_finder.ipynb)**
+
+#### Path finder
+Example notebook for **[PathFinder](https://github.com/gloriachin/Translator_component_toolkit/tree/main/notebooks/Path_finder.ipynb)**
+
+#### Network finder
+Example notebook for **[NetworkFinder](https://github.com/gloriachin/Translator_component_toolkit/tree/main/notebooks/Network_finder.ipynb)**
+
+#### Translate users' questions into TRAPI queries
+Example notebook for translating users' questions into TRAPI queries can be found [here](https://github.com/gloriachin/Translator_component_toolkit/tree/main/notebooks/Question2Query_chatGPT.ipynb). 
+
+#### Connecting to a user's API
+API should be developed following the standard from [TRAPI](https://github.com/NCATSTranslator/ReasonerAPI). <br>
+An example notebook for add a user's API can be found [here](https://github.com/gloriachin/Translator_component_toolkit/tree/main/notebooks/Connecting_userAPI.ipynb).<br>
+**Warning: It does not work if no user' API is established**<br>
+
+## Key Translator components
+Connecting to key Translator components can be found [here](./components)
+
+
+
+
+================================================
+FILE: docs/source/metakg.rst
+================================================
+TCT.name_resolver
+=================
+.. automodule:: TCT.name_resolver
+   :members:
+
+
+
+================================================
+FILE: docs/source/name_resolver.rst
+================================================
+TCT.name_resolver
+=================
+.. automodule:: TCT.name_resolver
+   :members:
+
+
+
+================================================
+FILE: docs/source/neighborhood.rst
+================================================
+TCT.neighborhood
+=================
+.. automodule:: TCT.neighborhood
+   :members:
+
+
+
+================================================
+FILE: docs/source/node_normalizer.rst
+================================================
+TCT.node_normalizer
+===================
+.. automodule:: TCT.node_normalizer
+   :members:
+
+
+
+================================================
+FILE: docs/source/pathfinder.rst
+================================================
+TCT.pathfinder
+=================
+.. automodule:: TCT.pathfinder
+   :members:
+
+
+
+================================================
+FILE: docs/source/TCT.rst
+================================================
+TCT utility functions
+===========================
+.. automodule:: TCT.TCT
+   :members:
+
+
+
+================================================
+FILE: docs/source/translator_kpinfo.rst
+================================================
+TCT.translator_kpinfo
+=====================
+.. automodule:: TCT.translator_kpinfo
+   :members:
+
+
+
+================================================
+FILE: docs/source/translator_metakg.rst
+================================================
+TCT.translator_metakg
+=====================
+.. automodule:: TCT.translator_metakg
+   :members:
+
+
+
+================================================
+FILE: docs/source/translator_node.rst
+================================================
+TCT.translator_node
+===================
+.. automodule:: TCT.translator_node
+   :members:
+
+
+
+================================================
+FILE: docs/source/translator_query.rst
+================================================
+TCT.translator_query
+=================
+.. automodule:: TCT.translator_query
+   :members:
+
+
+
+================================================
+FILE: docs/source/trapi.rst
+================================================
+TCT.trapi
+=================
+.. automodule:: TCT.trapi
+   :members:
+
+
+
+================================================
+FILE: metaData/core_components.csv
+================================================
+[Empty file]
+
+
+================================================
+FILE: metaData/Translator_KP_info.csv
+================================================
+id,title,prod_url,ci_url,test_url
+https://smart-api.info/ui/1d288b3a3caf75d541ffaae3aab386c8,BioThings SEMMEDDB API,https://biothings.ncats.io/semmeddb/query/,https://biothings.ci.transltr.io/semmeddb/query/,https://biothings.test.transltr.io/semmeddb/query/
+https://smart-api.info/ui/ac9c2ad11c5c442a1a1271223468ced1,RaMP API v1.0.1,https://rampdb.nih.gov/query/,,
+https://smart-api.info/ui/5c8740542b4444d4f85c2e23c670b952,Gene-List Network Enrichment Analysis,,https://translator.broadinstitute.org/gelinea-trapi/v1.5/query/,https://molepro-gelinea-trapi.test.transltr.io/gelinea-trapi/v1.5/query/
+https://smart-api.info/ui/71fa2e0f0f1fe1ec67f4ddb719db5ef3,Text Mined Cooccurrence API,https://cooccurrence.transltr.io/query/,https://cooccurrence.ci.transltr.io/query/,https://cooccurrence.test.transltr.io/query/
+https://smart-api.info/ui/d4290b6b5741e6da6cc6a6f42e0cfdb5,COHD TRAPI,https://cohd-api.transltr.io/api/query/,https://cohd.io/api/query/,https://cohd-api.test.transltr.io/api/query/
+https://smart-api.info/ui/a8be4ea3fe8fa80a952ead0b3c5e4bc1,Microbiome KP - TRAPI 1.5.0,https://multiomics.transltr.io/mbkp/query/,https://multiomics.ci.transltr.io/mbkp/query/,https://multiomics.test.transltr.io/mbkp/query/
+https://smart-api.info/ui/a6b575139cfd429b0a87f825a625d036,RTX KG2 - TRAPI 1.5.0,https://kg2cploverdb.transltr.io/query/,https://kg2cploverdb.ci.transltr.io/query/,https://kg2cploverdb.test.transltr.io/query/
+https://smart-api.info/ui/dc91716f44207d2e1287c727f281d339,BioThings Explorer (BTE) TRAPI,https://bte.transltr.io/v1/query/,https://api.bte.ncats.io/v1/query/,https://bte.test.transltr.io/v1/query/
+https://smart-api.info/ui/415c3b1a85ead4ceb58caf00dee9b24e,imProving Agent for TRAPI 1.5,https://ia.transltr.io/api/v1.5/query/,https://ia.healthdatascience.cloud/api/v1.5/query/,https://ia.test.transltr.io/api/v1.5/query/
+https://smart-api.info/ui/3f78d3fb8a7a577fbc7cc0a913ac3fc5,Automat-panther(Trapi v1.5.0),https://automat.transltr.io/panther/query/,https://automat.renci.org/panther/query/,https://automat.test.transltr.io/panther/query/
+https://smart-api.info/ui/6f4dd91bc56fce4f597bc44153cf418e,Automat-ehr-clinical-connections-kp(Trapi v1.5.0),,https://automat.renci.org/ehr-clinical-connections-kp/query/,
+https://smart-api.info/ui/a5fe24f987331b58191e67598118f369,Automat-hetionet(Trapi v1.5.0),https://automat.transltr.io/hetio/query/,https://automat.renci.org/hetio/query/,https://automat.test.transltr.io/hetio/query/
+https://smart-api.info/ui/03e63fbd5ed251bce08cb5801b6b169b,ARAX Translator Reasoner - TRAPI 1.5.0,https://arax.transltr.io/api/arax/v1.4/query/,https://arax.ncats.io/devLM/api/arax/v1.4/query/,https://arax.test.transltr.io/api/arax/v1.4/query/
+https://smart-api.info/ui/55a223c6c6e0291dbd05f2faf27d16f4,BioThings BioPlanet Pathway-Disease API,https://biothings.ncats.io/bioplanet_pathway_disease/query/,https://biothings.ci.transltr.io/bioplanet_pathway_disease/query/,https://biothings.test.transltr.io/bioplanet_pathway_disease/query/
+https://smart-api.info/ui/c563a58be4aacb68d10ba0ceb6b52255,mediKanren,https://medikanren-trapi.transltr.io/query/,https://medikanren-trapi.ci.transltr.io/query/,https://medikanren-trapi.test.transltr.io/query/
+https://smart-api.info/ui/412af63e15b73e5a30778aac84ce313f,Connections Hypothesis Provider API,https://chp-api.transltr.io/query/,https://chp-api.ci.transltr.io/query/,https://chp-api.test.transltr.io/query/
+https://smart-api.info/ui/1138c3297e8e403b6ac10cff5609b319,BioThings repoDB API,https://biothings.ncats.io/repodb/query/,https://biothings.ci.transltr.io/repodb/query/,https://biothings.test.transltr.io/repodb/query/
+https://smart-api.info/ui/38e9e5169a72aee3659c9ddba956790d,BioThings BindingDB API,https://biothings.ncats.io/bindingdb/query/,https://biothings.ci.transltr.io/bindingdb/query/,https://biothings.test.transltr.io/bindingdb/query/
+https://smart-api.info/ui/36f82f05705c317bac17ddae3a0ea2f0,Service Provider TRAPI,https://bte.transltr.io/v1/team/Service%20Provider/query/,https://api.bte.ncats.io/v1/team/Service%20Provider/query/,https://bte.test.transltr.io/v1/team/Service%20Provider/query/
+https://smart-api.info/ui/a5b0ec6bfde5008984d4b6cde402d61f,BioThings HPO API,https://biothings.ncats.io/hpo/query/,https://biothings.ci.transltr.io/hpo/query/,https://biothings.test.transltr.io/hpo/query/
+https://smart-api.info/ui/8601da411b8681dbbc32239ceb0f1a55,Knowledge Collaboratory API,https://collaboratory-api.transltr.io/query/,https://collaboratory-api.ci.transltr.io/query/,https://collaboratory-api.test.transltr.io/query/
+https://smart-api.info/ui/1dad992a6ce8f680e59a5ea09d90670d,Aragorn(Trapi v1.5.0),https://aragorn.transltr.io/aragorn/query/,https://aragorn.renci.org/aragorn/query/,https://aragorn.test.transltr.io/aragorn/query/
+https://smart-api.info/ui/7f70cdfaeb801501da08dacc294e8b9f,SPOKE KP for TRAPI 1.5,https://spokekp.transltr.io/api/v1.5/query/,https://spokekp.healthdatascience.cloud/api/v1.5/query/,https://spokekp.test.transltr.io/api/v1.5/query/
+https://smart-api.info/ui/59dce17363dce279d389100834e43648,MyGene.info API,https://mygene.info/v3/query/,,
+https://smart-api.info/ui/adf20dd6ff23dfe18e8e012bde686e31,Multiomics BigGIM-DrugResponse KP API,https://biothings.ncats.io/biggim_drugresponse_kp/query/,https://biothings.ci.transltr.io/biggim_drugresponse_kp/query/,https://biothings.test.transltr.io/biggim_drugresponse_kp/query/
+https://smart-api.info/ui/1c2eb8d02b4796c6a657c3363c0657dc,Sri-node-normalizer(Trapi v1.5.0),https://nodenorm.transltr.io/1.5/query/,https://nodenormalization-sri.renci.org/1.5/query/,https://nodenorm.test.transltr.io/1.5/query/
+https://smart-api.info/ui/43af91b3d7cae43591083bff9d75c6dd,EBI Proteins API,https://www.ebi.ac.uk/proteins/api/query/,,
+https://smart-api.info/ui/db981dff8d93dcb0cfab5dbee8afbb40,Genetics Data Provider for NCATS Biomedical Translator Reasoners,https://genetics-kp.transltr.io/genetics_provider/trapi/v1.5/query/,https://translator.broadinstitute.org/genetics_provider/trapi/v1.5/query/,https://genetics-kp.test.transltr.io/genetics_provider/trapi/v1.5/query/
+https://smart-api.info/ui/1901bab8d33bb70b124f400ec1cfdba3,MolePro,https://molepro-trapi.transltr.io/molepro/trapi/v1.5/query/,https://translator.broadinstitute.org/molepro/trapi/v1.5/query/,https://molepro-trapi.test.transltr.io/molepro/trapi/v1.5/query/
+https://smart-api.info/ui/02f84c50043e94970316568439b7b384,Biolink Lookup,https://biolink-lookup.transltr.io/query/,https://bl-lookup-sri.renci.org/query/,https://biolink-lookup.test.transltr.io/query/
+https://smart-api.info/ui/6a3507ad6f709844d1b2b89691898a93,Workflow-runner(Trapi v1.5.0),https://translator-workflow-runner.transltr.io/query/,https://translator-workflow-runner.ci.transltr.io/query/,https://translator-workflow-runner.test.transltr.io/query/
+https://smart-api.info/ui/00fb85fc776279163199e6c50f6ddfc6,BioThings DDInter API,https://biothings.ncats.io/ddinter/query/,https://biothings.ci.transltr.io/ddinter/query/,https://biothings.test.transltr.io/ddinter/query/
+https://smart-api.info/ui/aa9c668df9d217409891cc7afb7ac039,Text Mined Cooccurrence API,,https://cooccurrence.ci.transltr.io/query/,
+https://smart-api.info/ui/e3edd325c76f2992a111b43a907a4870,BioThings DGIdb API,https://biothings.ncats.io/dgidb/query/,https://biothings.ci.transltr.io/dgidb/query/,https://biothings.test.transltr.io/dgidb/query/
+https://smart-api.info/ui/316eab811fd9ef1097df98bcaa9f7361,BioThings GTRx API,https://biothings.ncats.io/gtrx/query/,https://biothings.ci.transltr.io/gtrx/query/,https://biothings.test.transltr.io/gtrx/query/
+https://smart-api.info/ui/ec6d76016ef40f284359d17fbf78df20,BioThings UBERON API,https://biothings.ncats.io/uberon/query/,https://biothings.ci.transltr.io/uberon/query/,https://biothings.test.transltr.io/uberon/query/
+https://smart-api.info/ui/1c056ffc7ed0dd1229e71c4752239465,Ontology Lookup Service API,https://www.ebi.ac.uk/ols/api/query/,,
+https://smart-api.info/ui/edc04feaf16c12424737988ce2e90d60,Drug Approvals KP - TRAPI 1.5.0,https://multiomics.transltr.io/dakp/query/,https://multiomics.ci.transltr.io/dakp/query/,https://multiomics.test.transltr.io/dakp/query/
+https://smart-api.info/ui/6dcc5454fe4e0095090d8a956781c438,Sri-answer-appraiser(Trapi v1.5.0),https://answerappraiser.transltr.io/query/,https://answerappraiser.ci.transltr.io/query/,https://answerappraiser.test.transltr.io/query/
+https://smart-api.info/ui/326eb1e437303bee27d3cef29227125d,Complex Portal Web Service,https://www.ebi.ac.uk/intact/complex-ws/query/,,
+https://smart-api.info/ui/1b6de23ed3c4e0713b20794477ba1e39,Multiomics KP - TRAPI 1.5.0,https://multiomics.transltr.io/mokp/query/,https://multiomics.ci.transltr.io/mokp/query/,https://multiomics.test.transltr.io/mokp/query/
+https://smart-api.info/ui/f82c01b15c46e024212c1a3271aaef0b,Automat-ctd(Trapi v1.5.0),https://automat.transltr.io/ctd/query/,https://automat.renci.org/ctd/query/,https://automat.test.transltr.io/ctd/query/
+https://smart-api.info/ui/9995fed757acd034ef099dbb483c4c82,Sri-name-resolver,https://name-lookup.transltr.io/query/,https://name-resolution-sri.renci.org/query/,https://name-lookup.test.transltr.io/query/
+https://smart-api.info/ui/b48c34df08d16311e3bca06b135b828d,BioThings SuppKG API,https://biothings.ncats.io/suppkg/query/,https://biothings.ci.transltr.io/suppkg/query/,https://biothings.test.transltr.io/suppkg/query/
+https://smart-api.info/ui/f1b8f64c316a01d1722f0fb842499fe5,BioThings FooDB API,https://biothings.ncats.io/foodb/query/,https://biothings.ci.transltr.io/foodb/query/,https://biothings.test.transltr.io/foodb/query/
+https://smart-api.info/ui/b772ebfbfa536bba37764d7fddb11d6f,BioThings RARe-SOURCE API,https://biothings.ncats.io/rare_source/query/,https://biothings.ci.transltr.io/rare_source/query/,https://biothings.test.transltr.io/rare_source/query/
+https://smart-api.info/ui/1c9be9e56f93f54192dcac203f21c357,BioThings mabs API,,https://biothings.ci.transltr.io/mabs/query/,
+https://smart-api.info/ui/77ed27f111262d0289ed4f4071faa619,BioThings MGIgene2phenotype API,https://biothings.ncats.io/mgigene2phenotype/query/,https://biothings.ci.transltr.io/mgigene2phenotype/query/,https://biothings.test.transltr.io/mgigene2phenotype/query/
+https://smart-api.info/ui/0a1c0f46f4950b82b1aa7dad27aad10a,Automat-hmdb(Trapi v1.5.0),https://automat.transltr.io/hmdb/query/,https://automat.renci.org/hmdb/query/,https://automat.test.transltr.io/hmdb/query/
+https://smart-api.info/ui/fe8bb783ff710ab4e176f38c5f7777af,Answer-coalesce(Trapi v1.5.0),https://answer-coalesce.transltr.io/query/,https://answercoalesce.renci.org/query/,https://answer-coalesce.test.transltr.io/query/
+https://smart-api.info/ui/09c8782d9f4027712e65b95424adba79,MyVariant.info API,https://myvariant.info/v1/query/,,
+https://smart-api.info/ui/0212611d1c670f9107baf00b77f0889a,CTD API,https://ctdbase.org/query/,,
+https://smart-api.info/ui/b99c6dd64abcefe87dcd0a51c249ee6d,BioThings BioPlanet Pathway-Gene API,https://biothings.ncats.io/bioplanet_pathway_gene/query/,https://biothings.ci.transltr.io/bioplanet_pathway_gene/query/,https://biothings.test.transltr.io/bioplanet_pathway_gene/query/
+https://smart-api.info/ui/8671309d2b94e413a4c1f9a9f82e4660,Automat-hgnc(Trapi v1.5.0),https://automat.transltr.io/hgnc/query/,https://automat.renci.org/hgnc/query/,https://automat.test.transltr.io/hgnc/query/
+https://smart-api.info/ui/32f36164fabed5d3abe6c2fd899c9418,BioThings IDISK API,https://biothings.ncats.io/idisk/query/,https://biothings.ci.transltr.io/idisk/query/,https://biothings.test.transltr.io/idisk/query/
+https://smart-api.info/ui/895ec14a3650ec7ad85959a2d1554e2f,BioThings FoodData Central API,https://biothings.ncats.io/fooddata/query/,https://biothings.ci.transltr.io/fooddata/query/,https://biothings.test.transltr.io/fooddata/query/
+https://smart-api.info/ui/02af7d098ab304e80d6f4806c3527027,Multiomics Wellness KP API,https://biothings.ncats.io/multiomics_wellness_kp/query/,https://biothings.ci.transltr.io/multiomics_wellness_kp/query/,https://biothings.test.transltr.io/multiomics_wellness_kp/query/
+https://smart-api.info/ui/34bad236d77bea0a0ee6c6cba5be54a6,BioThings GO Molecular Function API,https://biothings.ncats.io/go_mf/query/,https://biothings.ci.transltr.io/go_mf/query/,https://biothings.test.transltr.io/go_mf/query/
+https://smart-api.info/ui/f339b28426e7bf72028f60feefcd7465,BioThings GO Cellular Component API,https://biothings.ncats.io/go_cc/query/,https://biothings.ci.transltr.io/go_cc/query/,https://biothings.test.transltr.io/go_cc/query/
+https://smart-api.info/ui/bde72db681ec0b8f9eeb67bb6b8dd72c,PharmGKB REST API,https://api.pharmgkb.org/v1/query/,,
+https://smart-api.info/ui/68f12100e74342ae0dd5013d5f453194,BioThings AGR API,https://biothings.ncats.io/agr/query/,https://biothings.ci.transltr.io/agr/query/,https://biothings.test.transltr.io/agr/query/
+https://smart-api.info/ui/e9eb40ff7ad712e4e6f4f04b964b5966,BioThings InnateDB API,https://biothings.ncats.io/innatedb/query/,https://biothings.ci.transltr.io/innatedb/query/,https://biothings.test.transltr.io/innatedb/query/
+https://smart-api.info/ui/03283cc2b21c077be6794e1704b1d230,BioThings Rhea API,https://biothings.ncats.io/rhea/query/,https://biothings.ci.transltr.io/rhea/query/,https://biothings.test.transltr.io/rhea/query/
+https://smart-api.info/ui/5a4c41bf2076b469a0e9cfcf2f2b8f29,Translator Annotation Service,https://biothings.ncats.io/annotator/query/,,
+https://smart-api.info/ui/c359a127dc8824d90cef436d3dce71d4,Cqs(Trapi v1.5.0),,https://cqs.ci.transltr.io/query/,https://cqs.test.transltr.io/query/
+https://smart-api.info/ui/1f47552dabd67351d4c625adb0a10d00,BioThings EBIgene2phenotype API,https://biothings.ncats.io/ebigene2phenotype/query/,https://biothings.ci.transltr.io/ebigene2phenotype/query/,https://biothings.test.transltr.io/ebigene2phenotype/query/
+https://smart-api.info/ui/4c12efd48ced755ac4b72b1922202ec2,Autonomous Relay System (ARS) TRAPI,https://ars-prod.transltr.io/ars/api/submit/,https://ars-dev.transltr.io/query/,https://ars.test.transltr.io/ars/api/submit/
+https://smart-api.info/ui/a7f784626a426d054885a5f33f17d3f8,BioThings DISEASES API,https://biothings.ncats.io/DISEASES/query/,https://biothings.ci.transltr.io/DISEASES/query/,https://biothings.test.transltr.io/DISEASES/query/
+https://smart-api.info/ui/025600054bd8d6fb14ee66ee9d4a9830,OpenPredict API,https://openpredict.transltr.io/query/,https://openpredict.ci.transltr.io/query/,https://openpredict.test.transltr.io/query/
+https://smart-api.info/ui/671b45c0301c8624abbd26ae78449ca2,MyDisease.info API,https://mydisease.info/v1/query/,,
+https://smart-api.info/ui/eb4e66886fe5c178ae41977cea2c6307,Automat-ehr-may-treat-kp(Trapi v1.5.0),,https://automat.renci.org/ehr-may-treat-kp/query/,
+https://smart-api.info/ui/a9d6ee341d8ea4c7d3ae9ed0941cb274,Automat-binding-db(Trapi v1.5.0),https://automat.transltr.io/binding-db/query/,https://automat.renci.org/binding-db/query/,https://automat.test.transltr.io/binding-db/query/
+https://smart-api.info/ui/1f277e1563fcfd124bfae2cc3c4bcdec,QuickGO API,https://www.ebi.ac.uk/QuickGO/services/query/,,
+https://smart-api.info/ui/edeb26858bd27d0322af93e7a9e08761,BioThings PFOCR API,https://biothings.ncats.io/pfocr/query/,https://biothings.ci.transltr.io/pfocr/query/,https://biothings.test.transltr.io/pfocr/query/
+https://smart-api.info/ui/cc857d5b7c8b7609b5bbb38ff990bfff,BioThings GO Biological Process API,https://biothings.ncats.io/go_bp/query/,https://biothings.ci.transltr.io/go_bp/query/,https://biothings.test.transltr.io/go_bp/query/
+https://smart-api.info/ui/2aca41fc6c3dc426ec6583d42603be02,Automat-viral-proteome(Trapi v1.5.0),https://automat.transltr.io/viral-proteome/query/,https://automat.renci.org/viral-proteome/query/,https://automat.test.transltr.io/viral-proteome/query/
+https://smart-api.info/ui/4f9c8853b721ef1f14ecee6d92fc19b5,Automat-robokop(Trapi v1.5.0),https://automat.transltr.io/robokopkg/query/,https://automat.renci.org/robokopkg/query/,https://automat.test.transltr.io/robokopkg/query/
+https://smart-api.info/ui/8f08d1446e0bb9c2b323713ce83e2bd3,MyChem.info API,https://mychem.info/v1/query/,,
+https://smart-api.info/ui/1f057c53d42694686369f0e542f965c6,Automat-pharos(Trapi v1.5.0),https://automat.transltr.io/pharos/query/,https://automat.renci.org/pharos/query/,https://automat.test.transltr.io/pharos/query/
+https://smart-api.info/ui/978fe380a147a8641caf72320862697b,Text Mining Targeted Association API,https://biothings.ncats.io/text_mining_targeted_association/query/,https://biothings.ci.transltr.io/text_mining_targeted_association/query/,https://biothings.test.transltr.io/text_mining_targeted_association/query/
+https://smart-api.info/ui/eef72049e4e01c020b7799f711e0e65b,Automat-gtex(Trapi v1.5.0),https://automat.transltr.io/gtex/query/,https://automat.renci.org/gtex/query/,https://automat.test.transltr.io/gtex/query/
+https://smart-api.info/ui/759df287a21c30cd514df323be02a84b,Automat-gtopdb(Trapi v1.5.0),https://automat.transltr.io/gtopdb/query/,https://automat.renci.org/gtopdb/query/,https://automat.test.transltr.io/gtopdb/query/
+https://smart-api.info/ui/b4023595664163e0aec5e825da150e16,Automat-intact(Trapi v1.5.0),https://automat.transltr.io/intact/query/,https://automat.renci.org/intact/query/,https://automat.test.transltr.io/intact/query/
+https://smart-api.info/ui/d22b657426375a5295e7da8a303b9893,Monarch API,https://api-v3.monarchinitiative.org/query/,,
+https://smart-api.info/ui/e481efd21f8e8c1deac05662439c2294,Biothings Therapeutic Target Database API,https://biothings.ncats.io/ttd/query/,https://biothings.ci.transltr.io/ttd/query/,https://biothings.test.transltr.io/ttd/query/
+https://smart-api.info/ui/7ab0209ea8590341d8e5d0166cac3d2f,Automat-cam-kp(Trapi v1.5.0),https://automat.transltr.io/cam-kp/query/,https://automat.renci.org/cam-kp/query/,https://automat.test.transltr.io/cam-kp/query/
+https://smart-api.info/ui/b4c868db33b95b4890faeeefd5800552,Automat-genome-alliance(Trapi v1.5.0),https://automat.transltr.io/genome-alliance/query/,https://automat.renci.org/genome-alliance/query/,https://automat.test.transltr.io/genome-alliance/query/
+https://smart-api.info/ui/6b88f83127513bd350e6962218ea84f4,Automat-monarchinitiative(Trapi v1.5.0),https://automat.transltr.io/monarch-kg/query/,https://automat.renci.org/monarch-kg/query/,https://automat.test.transltr.io/monarch-kg/query/
+https://smart-api.info/ui/d86a24f6027ffe778f84ba10a7a1861a,Multiomics EHR Risk KP API,https://biothings.ncats.io/multiomics_ehr_risk_kp/query/,https://biothings.ci.transltr.io/multiomics_ehr_risk_kp/query/,https://biothings.test.transltr.io/multiomics_ehr_risk_kp/query/
+https://smart-api.info/ui/c64d583402f21cc85810d33befe49c86,Automat-icees-kg(Trapi v1.5.0),https://automat.transltr.io/icees-kg/query/,https://automat.renci.org/icees-kg/query/,https://automat.test.transltr.io/icees-kg/query/
+https://smart-api.info/ui/349fed5531c094c33f10c071efe9d0de,Automat-gwas-catalog(Trapi v1.5.0),https://automat.transltr.io/gwas-catalog/query/,https://automat.renci.org/gwas-catalog/query/,https://automat.test.transltr.io/gwas-catalog/query/
+https://smart-api.info/ui/dde0552a37fc136526216148ff7594a0,Automat-ubergraph(Trapi v1.5.0),https://automat.transltr.io/ubergraph/query/,https://automat.renci.org/ubergraph/query/,https://automat.test.transltr.io/ubergraph/query/
+https://smart-api.info/ui/cb7a43d444cb3dcbe8e3c78d314334cf,Automat-human-goa(Trapi v1.5.0),https://automat.transltr.io/human-goa/query/,https://automat.renci.org/human-goa/query/,https://automat.test.transltr.io/human-goa/query/
+https://smart-api.info/ui/61b41c5d9b90eb8ad16e037f9a87d593,Automat-reactome(Trapi v1.5.0),https://automat.transltr.io/reactome/query/,https://automat.renci.org/reactome/query/,https://automat.test.transltr.io/reactome/query/
+https://smart-api.info/ui/dca415f2d792976af9d642b7e73f7a41,LitVar API,https://www.ncbi.nlm.nih.gov/research/bionlp/litvar/api/v1/query/,,
+https://smart-api.info/ui/7984a621a28c109c5c09f65fed0e7ea7,Automat-string-db(Trapi v1.5.0),https://automat.transltr.io/string-db/query/,https://automat.renci.org/string-db/query/,https://automat.test.transltr.io/string-db/query/
+https://smart-api.info/ui/673b9fc76973dfa5fe3ed151fdbfc807,Automat-drug-central(Trapi v1.5.0),https://automat.transltr.io/drugcentral/query/,https://automat.renci.org/drugcentral/query/,https://automat.test.transltr.io/drugcentral/query/
+https://smart-api.info/ui/e51073371d7049b9643e1edbdd61bcbd,Clinical Trials KP - TRAPI 1.5.0,https://multiomics.transltr.io/ctkp/query/,https://multiomics.ci.transltr.io/ctkp/query/,https://multiomics.test.transltr.io/ctkp/query/
+https://smart-api.info/ui/1aa030d12bd9e2cb3185d97282bee1de,CATRAX Pharmacogenomics KP - TRAPI 1.5.0,https://multiomics.transltr.io/PharmacogenomicsKG/query/,https://multiomics.ci.transltr.io/PharmacogenomicsKG/query/,https://multiomics.test.transltr.io/PharmacogenomicsKG/query/
+
+
+
+================================================
+FILE: notebooks/Annotate_graph.ipynb
+================================================
+# Jupyter notebook converted to Python script.
+
+# This notebook is used to find a network from a list of nodes in Translator
+
+import sys
+sys.path.append('../src')
+import TCT as TCT
+import pandas as pd
+
+
+# Step1: List all the APIs in the translator system
+APInames = TCT.list_Translator_APIs()
+print(len(APInames))
+print(list(APInames.keys()))
+# Output:
+#   98
+
+#   ['Automat-ctd(Trapi v1.4.0)', 'Automat-sri-reference-kg(Trapi v1.4.0)', 'Autonomous Relay System (ARS) TRAPI', 'BioLink API', 'BioThings AGR API', 'BioThings BioPlanet Pathway-Gene API', 'BioThings DDInter API', 'BioThings Explorer (BTE) TRAPI', 'BioThings FooDB API', 'BioThings FoodData Central API', 'BioThings GO Biological Process API', 'BioThings InnateDB API', 'BioThings RARe-SOURCE API', 'BioThings repoDB API', 'Biolink Lookup', 'Biothings Therapeutic Target Database API', 'COHD TRAPI', 'Complex Portal Web Service', 'Curated Query Service', 'EBI Proteins API', 'Gene-List Network Enrichment Analysis', 'Knowledge Collaboratory API', 'LitVar API', 'RaMP API v1.0.1', 'SmartAPI API', 'Sri-answer-appraiser(Trapi v1.4.0)', 'Sri-name-resolver', 'Sri-node-normalizer(Trapi v1.3.0)', 'Sri-node-normalizer(Trapi v1.4.0)', 'Translator Annotation Service', 'Workflow-runner(Trapi v1.4.0)', 'imProving Agent for TRAPI 1.4', 'Aragorn(Trapi v1.4.0)', 'ARAX Translator Reasoner - TRAPI 1.4.0', 'RTX KG2 - TRAPI 1.4.0', 'SPOKE KP for TRAPI 1.4', 'Multiomics BigGIM-DrugResponse KP API', 'Multiomics ClinicalTrials KP', 'Multiomics Wellness KP API', 'Multiomics EHR Risk KP API', 'Biothings Explorer (BTE)', 'Service Provider TRAPI', 'Explanatory-agent', 'MolePro', 'Genetics KP', 'medikanren-unsecret', 'Text Mined Cooccurrence API', 'OpenPredict API', 'Agrkb(Trapi v1.4.0)', 'Automat-biolink(Trapi v1.4.0)', 'Automat-cam-kp(Trapi v1.4.0)', 'Automat-drug-central(Trapi v1.4.0)', 'Automat-gtex(Trapi v1.4.0)', 'Automat-gtopdb(Trapi v1.4.0)', 'Automat-gwas-catalog(Trapi v1.4.0)', 'Automat-hetio(Trapi v1.4.0)', 'Automat-hgnc(Trapi v1.4.0)', 'Automat-hmdb(Trapi v1.4.0)', 'Automat-human-goa(Trapi v1.4.0)', 'Automat-icees-kg(Trapi v1.4.0)', 'Automat-intact(Trapi v1.4.0)', 'Automat-panther(Trapi v1.4.0)', 'Automat-pharos(Trapi v1.4.0)', 'Automat-robokop(Trapi v1.4.0)', 'Automat-sri-reference-kp(Trapi v1.4.0)', 'Automat-string-db(Trapi v1.4.0)', 'Automat-ubergraph(Trapi v1.4.0)', 'Automat-ubergraph-nonredundant(Trapi v1.4.0)', 'Automat-viral-proteome(Trapi v1.4.0)', 'CTD API', 'Connections Hypothesis Provider API', 'MyGene.info API', 'MyDisease.info API', 'MyChem.info API', 'MyVariant.info API', 'Ontology Lookup Service API', 'PharmGKB REST API', 'QuickGO API', 'Text Mining Targeted Association API', 'BioThings BindingDB API', 'BioThings BioPlanet Pathway-Disease API', 'BioThings DDinter API', 'BioThings DGIdb API', 'BioThings DISEASES API', 'BioThings EBIgene2phenotype API', 'BioThings Biological Process API', 'BioThings GO Cellular Component API', 'BioThings GO Molecular Function API', 'BioThings GTRx API', 'BioThings HPO API', 'BioThings IDISK API', 'BioThings MGIgene2phenotype API', 'BioThings PFOCR API', 'Biothings RARe-SOURCE API', 'BioThings Rhea API', 'BioThings SEMMEDDB API', 'BioThings SuppKG API', 'BioThings UBERON API']
+
+
+# Step 2: Get metaKG and all predicates from Translator APIs
+#metaKG = TCT.get_KP_metadata(APInames) # This only applies to the Translator APIs
+#print(metaKG.columns)
+#print(metaKG.shape)
+
+#metaKG.to_csv('../metaData/metaKG.csv', index=False)
+metaKG = pd.read_csv('../metaData/metaKG.csv')
+All_predicates = list(set(metaKG['KG_category']))
+
+input_node_list = [TCT.get_curie('NPM1'), TCT.get_curie('FLT3'), TCT.get_curie('NRAS'), TCT.get_curie('BCL2')]
+
+
+input_node1_category = ['biolink:Gene'] # Node: this has to be in a format of biolink:xxx
+input_node2_category = ['biolink:Gene']
+sele_predicates = list(set(TCT.select_concept(sub_list=input_node1_category,obj_list=input_node2_category,metaKG=metaKG)))
+sele_APIs = TCT.select_API(sub_list=input_node1_category,obj_list=input_node2_category,metaKG=metaKG)
+API_URLs = TCT.get_Translator_API_URL(sele_APIs, APInames)
+
+
+query_json = TCT.format_query_json(input_node_list,  # a list of identifiers for input node1
+                                   [],  # it can be empty list if only want to query node1
+                                   input_node1_category,  # a list of categories of input node1
+                                   input_node2_category,  # a list of categories of input node2
+                                   sele_predicates) # a list of predicates
+
+result = TCT.parallel_api_query(API_URLs,query_json=query_json, max_workers=len(API_URLs))
+pairs_found = TCT.get_pair_annotation(result, input_node_list)
+edge_list = TCT.parse_pair_annotation(pairs_found,input_node_list)
+
+# Output:
+#   '' generated an exception: Invalid URL '': No scheme supplied. Perhaps you meant https://?
+
+#   '' generated an exception: Invalid URL '': No scheme supplied. Perhaps you meant https://?
+
+#   '' generated an exception: Invalid URL '': No scheme supplied. Perhaps you meant https://?
+
+#   '' generated an exception: Invalid URL '': No scheme supplied. Perhaps you meant https://?
+
+#   '' generated an exception: Invalid URL '': No scheme supplied. Perhaps you meant https://?
+
+#   '' generated an exception: Invalid URL '': No scheme supplied. Perhaps you meant https://?
+
+#   Warning Code:404:https://api.bte.ncats.io/v1/bde72db681ec0b8f9eeb67bb6b8dd72c/query
+
+#   Warning Code:404:https://automat.ci.transltr.io/ubergraph-nonredundant/1.4/query
+
+#   Warning Code:405:https://automat.ci.transltr.io/cam-kp/1.4/query?limit=100Warning Code:404:https://automat.ci.transltr.io/sri-reference-kp/1.4/queryWarning Code:405:https://automat.ci.transltr.io/hetio/1.4/queryWarning Code:503:https://bte.test.transltr.io/v1/smartapi/adf20dd6ff23dfe18e8e012bde686e31/queryWarning Code:405:https://automat.ci.transltr.io/ubergraph/1.4/query
+
+#   
+
+#   
+
+#   
+
+#   
+
+#   Warning Code:404:https://ars-prod.transltr.io/ara-robokop/api/runquery
+
+#   Warning Code:404:https://automat.renci.org/biolink/1.4/queryWarning Code:405:https://automat.renci.org/gtopdb/1.4/query
+
+#   Warning Code:405:https://automat.renci.org/gwas-catalog/1.4/queryWarning Code:405:https://automat.renci.org/hgnc/1.4/query
+
+#   
+
+#   Warning Code:405:https://automat.renci.org/panther/1.4/query
+
+#   
+
+#   Warning Code:405:https://automat.renci.org/hmdb/1.4/query
+
+#   Warning Code:405:https://automat.renci.org/pharos/1.4/query
+
+#   Warning Code:405:https://automat.renci.org/gtex/1.4/query
+
+#   Success!https://automat.transltr.io/genome-alliance/1.4/query
+
+#   Warning Code:500:https://spokekp.transltr.io/api/v1.4/query
+
+#   Success!https://api.bte.ncats.io/v1/smartapi/59dce17363dce279d389100834e43648/query
+
+#   Success!https://translator.broadinstitute.org/molepro/trapi/v1.4/query
+
+#   Success!https://api.bte.ncats.io/v1/smartapi/1d288b3a3caf75d541ffaae3aab386c8/query
+
+#   Success!https://api.bte.ncats.io/v1/smartapi/978fe380a147a8641caf72320862697b/query
+
+#   Success!https://api.bte.ncats.io/v1/smartapi/978fe380a147a8641caf72320862697b/query
+
+#   Success!https://bte.transltr.io/v1/query
+
+
+#edge_list
+
+TCT.visulize_path(TCT.get_curie("NPM1"), "NCBIGene:3320", TCT.get_curie("FLT3"), result, result)
+# Output:
+#   CytoscapeWidget(cytoscape_layout={'name': 'cola', 'title': 'Path', 'nodeSpacing': 80, 'edgeLengthVal': 50}, cy…
+#            Subject         Object                                  Predicates  \
+
+#   0  NCBIGene:4869  NCBIGene:3320             associated_with::infores:string   
+
+#   1  NCBIGene:4869  NCBIGene:3320             interacts_with::infores:biogrid   
+
+#   2  NCBIGene:4869  NCBIGene:3320  physically_interacts_with::infores:biogrid   
+
+#   3  NCBIGene:2322  NCBIGene:3320             interacts_with::infores:biogrid   
+
+#   4  NCBIGene:2322  NCBIGene:3320  physically_interacts_with::infores:biogrid   
+
+#   
+
+#     Subject_name Object_name  
+
+#   0         NPM1    HSP90AA1  
+
+#   1         NPM1    HSP90AA1  
+
+#   2         NPM1    HSP90AA1  
+
+#   3         FLT3    HSP90AA1  
+
+#   4         FLT3    HSP90AA1  
+
+# results can be visualized in cytoscpe or networkx
+
+
+
+================================================
+FILE: notebooks/Network_finder.ipynb
+================================================
+# Jupyter notebook converted to Python script.
+
+# This notebook is used to find a network from a list of nodes in Translator
+
+from TCT import name_resolver
+from TCT import translator_metakg
+from TCT import translator_kpinfo
+from TCT import translator_query
+from TCT import TCT
+
+import pandas as pd
+import networkx as nx
+import ipycytoscape
+
+def load_translator_resources():
+    """
+    Load the necessary resources for the Translator.
+    """
+    Translator_KP_info,APInames= translator_kpinfo.get_translator_kp_info()
+    metaKG = translator_metakg.get_KP_metadata(APInames) 
+    APInames,metaKG = translator_metakg.add_plover_API(APInames, metaKG)
+    return  APInames, metaKG, Translator_KP_info
+
+
+def visualize_interaction_network(result_json):
+    """
+    Visualize the interaction network from the result JSON.
+
+    Parameters:
+    result_json (dict): The result JSON containing subjects, objects, and predicates.
+    
+    """
+
+    subjects = []
+    objects = []
+    predicates = []
+
+    for k, v in result_json.items():
+        subjects.append(v['subject'])
+        objects.append(v['object'])
+        predicates.append(v['predicate'])
+
+    # Convert subject and object CURIEs to names using lookup
+    subject_names = []
+    object_names = []
+
+    # Use batch_lookup for all subjects and objects to minimize API calls
+    unique_nodes = set(subjects + objects)
+    node_info_dict = name_resolver.batch_lookup(list(unique_nodes))
+    print(node_info_dict)
+
+    for subj, obj in zip(subjects, objects):
+        subj_info = node_info_dict.get(subj)
+        obj_info = node_info_dict.get(obj)
+        subject_names.append(subj_info.name if subj_info and hasattr(subj_info, 'name') else subj)
+        object_names.append(obj_info.name if obj_info and hasattr(obj_info, 'name') else obj)
+
+
+    df = pd.DataFrame({
+        "Subject": subject_names,
+        "Object": object_names,
+        "Predicate": predicates,
+    })
+
+    print(df.head())
+    # merge predicates and sources
+    # Convert 'Sources' to a string representation
+    # Remove duplicate edges
+    df = df.drop_duplicates()
+
+    # Build networkx graph
+    G1 = nx.from_pandas_edgelist(df, source='Subject', target='Object', edge_attr=['Predicate'], create_using=nx.MultiGraph)
+
+    # Cytoscape style
+    graph_style = [
+        {'selector': 'node', 'style': {'background-color': 'lightblue', 'shape': 'ellipse', 'label': 'data(id)', 'font-size': '12px'}},
+        {'selector': 'edge', 'style': {'label': 'data(Predicate)', 'font-size': '10px', "curve-style": "bezier"}}
+    ]
+
+    cyto_graph = ipycytoscape.CytoscapeWidget()
+    cyto_graph.graph.add_graph_from_networkx(G1, directed=True)
+    cyto_graph.set_style(graph_style)
+    cyto_graph.set_layout(name='cose', nodeSpacing=80, edgeLengthVal=50)
+
+    display(cyto_graph)
+
+    return df
+
+
+APInames, metaKG, Translator_KP_info= load_translator_resources()
+
+All_predicates = list(set(metaKG['Predicate']))
+All_categories = list((set(list(set(metaKG['Subject']))+list(set(metaKG['Object'])))))
+API_withMetaKG = list(set(metaKG['API']))
+
+    # generate a dictionary of API and its predicates
+API_predicates = {}
+for api in API_withMetaKG:
+    API_predicates[api] = list(set(metaKG[metaKG['API'] == api]['Predicate']))
+
+# input_nodes
+input_list = ['NPM1', 'FLT3', 'NRAS', 'BCL2', 'WNT7B']
+input_info = name_resolver.batch_lookup(input_list)
+input_node1_list = [] # get the curie of the nodes in the input_info dictionary
+input_node1_list = [input_info[node].curie for node in input_list]
+input_node1_category = []
+for node in input_list:
+    if hasattr(input_info[node], 'types'):
+        input_node1_category = input_node1_category + input_info[node].types
+input_node1_category = list(set(input_node1_category))
+
+# query nodes
+input_node2_list = []
+input_node2_category = ['biolink:Gene', 'biolink:Protein', 'biolink:ChemicalSubstance', 'biolink:Drug', 'biolink:DiseaseOrPhenotypicFeature']
+
+sele_predicates = list(set(TCT.select_concept(sub_list=input_node1_category,obj_list=input_node2_category,metaKG=metaKG)))
+print("all relevant predicates in Translator:")
+print(sele_predicates)
+
+
+# Get all APIs for the input node1 and node2, user can furter select the APIs among this list
+sele_APIs = TCT.select_API(sub_list=input_node1_category,obj_list=input_node2_category,metaKG=metaKG)
+print("all relevant APIs in Translator:")
+print(sele_APIs)
+print(len(sele_APIs))
+
+#sele_APIs = ['Multiomics BigGIM-DrugResponse KP API']
+sele_APIs = sele_APIs
+# get API URLs : two options: filter by API names or filter by predicates
+API_URLs = TCT.get_Translator_API_URL(sele_APIs, 
+                                      APInames)
+
+API_URLs
+# Output:
+#   all relevant predicates in Translator:
+
+#   ['biolink:coexists_with', 'biolink:has_participant', 'biolink:disrupts', 'biolink:same_as', 'biolink:acts_upstream_of_or_within', 'biolink:treats_or_applied_or_studied_to_treat', 'biolink:similar_to', 'biolink:chemically_similar_to', 'biolink:correlated_with', 'biolink:response_affected_by', 'biolink:affects_response_to', 'biolink:genetically_associated_with', 'biolink:negatively_correlated_with', 'biolink:decreases_response_to', 'biolink:related_to', 'biolink:physical_interacts_with', 'biolink:overlaps', 'biolink:transcribed_from', 'biolink:has_gene_product', 'biolink:GeneAffectsChemicalAssociation', 'biolink:associated_with_increased_likelihood_of', 'biolink:interacts_with', 'biolink:part_of', 'biolink:orthologous_to', 'biolink:affects', 'biolink:gene_product_of', 'biolink:physically_interacts_with', 'biolink:subclass_of', 'biolink:derives_into', 'biolink:preventative_for_condition', 'biolink:regulated_by', 'biolink:contraindicated_in', 'biolink:causes', 'biolink:derives_from', 'biolink:genetically_interacts_with', 'biolink:expressed_in', 'biolink:associated_with_sensitivity_to', 'biolink:associated_with_resistance_to', 'biolink:occurs_in', 'biolink:affected_by', 'biolink:regulates', 'biolink:colocalizes_with', 'biolink:has_part', 'biolink:translates_to', 'biolink:in_complex_with', 'biolink:associated_with', 'biolink:occurs_together_in_literature_with', 'biolink:directly_physically_interacts_with', 'biolink:has_member', 'biolink:composed_primarily_of', 'biolink:produces', 'biolink:homologous_to', 'biolink:located_in', 'biolink:produced_by', 'biolink:gene_associated_with_condition', 'biolink:capable_of', 'biolink:biomarker_for', 'biolink:increases_response_to', 'biolink:has_phenotype', 'biolink:is_sequence_variant_of', 'biolink:close_match', 'biolink:positively_correlated_with', 'biolink:target_for', 'biolink:has_input', 'biolink:coexpressed_with']
+
+#   all relevant APIs in Translator:
+
+#   ['Service Provider TRAPI', 'Automat-pharos(Trapi v1.5.0)', 'RTX KG2 - TRAPI 1.5.0', 'Automat-ehr-clinical-connections-kp(Trapi v1.5.0)', 'MolePro', 'SPOKE KP for TRAPI 1.5', 'Automat-icees-kg(Trapi v1.5.0)', 'Microbiome KP - TRAPI 1.5.0', 'Automat-robokop(Trapi v1.5.0)', 'CATRAX Pharmacogenomics KP - TRAPI 1.5.0', 'Connections Hypothesis Provider API', 'Multiomics KP - TRAPI 1.5.0', 'Automat-ehr-may-treat-kp(Trapi v1.5.0)', 'Text Mined Cooccurrence API', 'Automat-genome-alliance(Trapi v1.5.0)', 'Automat-hetionet(Trapi v1.5.0)', 'Automat-cam-kp(Trapi v1.5.0)', 'BioThings Explorer (BTE) TRAPI', 'CATRAX BigGIM DrugResponse Performance Phase KP - TRAPI 1.5.0', 'Automat-monarchinitiative(Trapi v1.5.0)', 'imProving Agent for TRAPI 1.5']
+
+#   21
+
+#   ['https://bte.transltr.io/v1/team/Service%20Provider/query/',
+
+#    'https://automat.transltr.io/pharos/query/',
+
+#    'https://kg2cploverdb.ci.transltr.io/kg2c/query',
+
+#    'https://automat.renci.org/ehr-clinical-connections-kp/query/',
+
+#    'https://molepro-trapi.transltr.io/molepro/trapi/v1.5/query/',
+
+#    'https://spokekp.transltr.io/api/v1.5/query/',
+
+#    'https://automat.transltr.io/icees-kg/query/',
+
+#    'https://multiomics.rtx.ai:9990/mbkp/query',
+
+#    'https://automat.transltr.io/robokopkg/query/',
+
+#    'https://multiomics.rtx.ai:9990/PharmacogenomicsKG/query',
+
+#    'https://chp-api.transltr.io/query/',
+
+#    'https://multiomics.rtx.ai:9990/multiomics/query',
+
+#    'https://automat.renci.org/ehr-may-treat-kp/query/',
+
+#    'https://cooccurrence.transltr.io/query/',
+
+#    'https://automat.transltr.io/genome-alliance/query/',
+
+#    'https://automat.transltr.io/hetio/query/',
+
+#    'https://automat.transltr.io/cam-kp/query/',
+
+#    'https://bte.transltr.io/v1/query/',
+
+#    'https://multiomics.rtx.ai:9990/BigGIM_DrugResponse_PerformancePhase/query',
+
+#    'https://automat.transltr.io/monarch-kg/query/',
+
+#    'https://ia.transltr.io/api/v1.5/query/']
+
+query_json = TCT.format_query_json(input_node1_list,  # a list of identifiers for input node1
+                                   input_node2_list,  # it can be empty list if only want to query node1
+                                   input_node1_category,  # a list of categories of input node1
+                                   input_node2_category,  # a list of categories of input node2
+                                   sele_predicates) # a list of pre
+
+# Step 5: Query Translator APIs and parse results
+
+result = translator_query.parallel_api_query(query_json=query_json, 
+                             select_APIs= sele_APIs, 
+                             APInames=APInames,
+                             API_predicates=API_predicates,
+                             max_workers=len(sele_APIs))
+# Output:
+#   'Automat-ehr-clinical-connections-kp(Trapi v1.5.0)' generated an exception: argument of type 'NoneType' is not iterable
+
+#   Microbiome KP - TRAPI 1.5.0: Success!
+
+#   'Automat-ehr-may-treat-kp(Trapi v1.5.0)' generated an exception: argument of type 'NoneType' is not iterable
+
+#   'imProving Agent for TRAPI 1.5' generated an exception: argument of type 'NoneType' is not iterable
+
+#   'SPOKE KP for TRAPI 1.5' generated an exception: argument of type 'NoneType' is not iterable
+
+#   'Automat-icees-kg(Trapi v1.5.0)' generated an exception: argument of type 'NoneType' is not iterable
+
+#   'Automat-monarchinitiative(Trapi v1.5.0)' generated an exception: argument of type 'NoneType' is not iterable
+
+#   'MolePro' generated an exception: argument of type 'NoneType' is not iterable
+
+#   'Multiomics KP - TRAPI 1.5.0' generated an exception: argument of type 'NoneType' is not iterable
+
+#   'Text Mined Cooccurrence API' generated an exception: argument of type 'NoneType' is not iterable
+
+#   Automat-genome-alliance(Trapi v1.5.0): Success!
+
+#   'Connections Hypothesis Provider API' generated an exception: 'NoneType' object has no attribute 'get'
+
+#   Automat-cam-kp(Trapi v1.5.0): Success!
+
+#   CATRAX Pharmacogenomics KP - TRAPI 1.5.0: Success!
+
+#   CATRAX BigGIM DrugResponse Performance Phase KP - TRAPI 1.5.0: Success!
+
+#   Automat-hetionet(Trapi v1.5.0): Success!
+
+#   Automat-pharos(Trapi v1.5.0): Success!
+
+#   RTX KG2 - TRAPI 1.5.0: Success!
+
+#   Automat-robokop(Trapi v1.5.0): Success!
+
+#   Service Provider TRAPI: Success!
+
+#   BioThings Explorer (BTE) TRAPI: Success!
+
+
+# select the recored in the result which is a dictionary if the subject and objects are both in input_node1_list
+result_filtered = {k: v for k, v in result.items() if isinstance(v, dict) and
+                   v.get('subject') in input_node1_list and
+                   v.get('object') in input_node1_list}
+
+len(result_filtered)
+result_df =visualize_interaction_network(result_filtered)
+
+# Output:
+#   {'NCBIGene:596': TranslatorNode(curie='UniProtKB:A0A4X1SN03', label='A0A4X1SN03_PIG Zinc finger protein 596 (trembl)', types=['biolink:Protein', 'biolink:GeneProductMixin', 'biolink:Polypeptide', 'biolink:ChemicalEntityOrGeneOrGeneProduct', 'biolink:ChemicalEntityOrProteinOrPolypeptide', 'biolink:BiologicalEntity', 'biolink:ThingWithTaxon', 'biolink:NamedThing', 'biolink:Entity', 'biolink:GeneOrGeneProduct', 'biolink:MacromolecularMachineMixin'], synonyms=None, curie_synonyms=None), 'NCBIGene:4869': TranslatorNode(curie='PUBCHEM.COMPOUND:676542', label='Cl-4869 peak 2', types=['biolink:SmallMolecule', 'biolink:MolecularEntity', 'biolink:ChemicalEntity', 'biolink:PhysicalEssence', 'biolink:ChemicalOrDrugOrTreatment', 'biolink:ChemicalEntityOrGeneOrGeneProduct', 'biolink:ChemicalEntityOrProteinOrPolypeptide', 'biolink:NamedThing', 'biolink:Entity', 'biolink:PhysicalEssenceOrOccurrent'], synonyms=None, curie_synonyms=None), 'NCBIGene:4893': TranslatorNode(curie='MESH:C568585', label='S-4893 compound', types=['biolink:ChemicalEntity', 'biolink:PhysicalEssence', 'biolink:ChemicalOrDrugOrTreatment', 'biolink:ChemicalEntityOrGeneOrGeneProduct', 'biolink:ChemicalEntityOrProteinOrPolypeptide', 'biolink:NamedThing', 'biolink:Entity', 'biolink:PhysicalEssenceOrOccurrent'], synonyms=None, curie_synonyms=None), 'NCBIGene:2322': TranslatorNode(curie='NCBIGene:100313282', label='MIR2322', types=['biolink:Gene', 'biolink:GeneOrGeneProduct', 'biolink:GenomicEntity', 'biolink:ChemicalEntityOrGeneOrGeneProduct', 'biolink:PhysicalEssence', 'biolink:OntologyClass', 'biolink:BiologicalEntity', 'biolink:ThingWithTaxon', 'biolink:NamedThing', 'biolink:Entity', 'biolink:PhysicalEssenceOrOccurrent', 'biolink:MacromolecularMachineMixin'], synonyms=None, curie_synonyms=None)}
+
+#            Subject         Object                          Predicate
+
+#   0  NCBIGene:2322  NCBIGene:4893            biolink:associated_with
+
+#   1  NCBIGene:4893  NCBIGene:2322            biolink:associated_with
+
+#   2  NCBIGene:2322  NCBIGene:2322                  biolink:regulates
+
+#   3  NCBIGene:2322  NCBIGene:2322  biolink:physically_interacts_with
+
+#   4   NCBIGene:596   NCBIGene:596  biolink:physically_interacts_with
+
+#   CytoscapeWidget(cytoscape_layout={'name': 'cose', 'nodeSpacing': 80, 'edgeLengthVal': 50}, cytoscape_style=[{'…
+
+
+
+================================================
+FILE: TCT/__init__.py
+================================================
+# ruff: noqa: F403, F405
+from .TCT import *
+
+from .translator_node import TranslatorNode as TranslatorNode
+
+from . import name_resolver as name_resolver, node_normalizer as node_normalizer, trapi as trapi, translator_kpinfo as translator_kpinfo
+
+
+
+================================================
+FILE: TCT/name_resolver.py
+================================================
+"""
+This is a wrapper around the Name Resolver API.
+
+API docs: https://name-lookup.ci.transltr.io/docs
+"""
+import urllib.parse
+
+import requests
+
+from .translator_node import TranslatorNode
+
+URL = 'https://name-lookup.ci.transltr.io/'
+"""This is the root URL for the API."""
+
+
+def lookup(query: str, return_top_response:bool=True, return_synonyms:bool=False, **kwargs):
+    """
+    A wrapper around the `lookup` api endpoint. Given a query string, this returns a TranslatorNode object or a list of TranslatorNode objects corresponding to the given name. 
+
+    Parameters
+    ----------
+    query : str
+        Query string
+    return_top_response : bool
+        If true, this returns only the top response. If false, this returns a list of all responses. Default: True
+    return_synonyms : bool
+        If true, the resulting TranslatorNode objects contain a list of synonyms. If false, they do not include synonyms. Default: False
+    **kwargs
+        Other arguments to `lookup`
+
+    Returns
+    -------
+    TranslatorNode object if return_top_response is True, list of TranslatorNode objects if return_top_response is False
+
+    Examples
+    --------
+    >>> lookup('AML')
+    TranslatorNode(curie='MONDO:0018874', label='acute myeloid leukemia', types=['biolink:Disease', 'biolink:DiseaseOrPhenotypicFeature', 'biolink:BiologicalEntity', 'biolink:ThingWithTaxon', 'biolink:NamedThing', 'biolink:Entity'], synonyms=None, curie_synonyms=None)
+
+    """
+    path = urllib.parse.urljoin(URL, 'lookup')
+    # set autocomplete to be false by default
+    if 'autocomplete' not in kwargs:
+        kwargs['autocomplete'] = False
+    response = requests.get(path, params={'string': query, **kwargs})
+    if response.status_code == 200:
+        result = response.json()
+        if len(result) == 0:
+            raise LookupError('No matching CURIE found for the given string ' + query)
+        else:
+            if return_top_response:
+                node = result[0]
+                n = TranslatorNode(node['curie'])
+                if 'label' in node:
+                    n.label = node['label']
+                if 'types' in node:
+                    n.types = node['types']
+                if return_synonyms and 'synonyms' in node:
+                    n.synonyms = node['synonyms']
+                return n
+            else:
+                all_nodes = []
+                for node in result:
+                    curie = node['curie']
+                    n = TranslatorNode(curie)
+                    if 'label' in node:
+                        n.label = node['label']
+                    if 'types' in node:
+                        n.types = node['types']
+                    if return_synonyms and 'synonyms' in node:
+                        n.synonyms = node['synonyms']
+                    all_nodes.append(n)
+                return all_nodes
+    else:
+        raise requests.RequestException('Response from server had error, code ' + str(response.status_code) + ' ' + str(response))
+
+
+def synonyms(query: str, **kwargs):
+    """
+    A wrapper around the `synonyms` api endpoint. Given a query string, this returns a dict of CURIE id : TranslatorNode for all synonyms for the given query. 
+
+    Parameters
+    ----------
+    query : str
+        Query CURIE
+    **kwargs
+        Other arguments to `synonyms`
+
+    Returns
+    -------
+    Dict of CURIE id : TranslatorNode
+    """
+    path = urllib.parse.urljoin(URL, 'synonyms')
+    # set autocomplete to be false by default
+    response = requests.get(path, params={'preferred_curies': query, **kwargs})
+    if response.status_code == 200:
+        result = response.json()
+        if len(result) == 0:
+            raise LookupError('No matching CURIE found for the given string ' + query)
+        else:
+            all_nodes = {}
+            for k, node in result.items():
+                curie = node['curie']
+                n = TranslatorNode(curie)
+                if 'preferred_name' in node:
+                    n.label = node['preferred_name']
+                if 'types' in node:
+                    n.types = node['types']
+                if 'names' in node:
+                    n.synonyms = node['names']
+                all_nodes[k] = n
+            return all_nodes
+    else:
+        raise requests.RequestException('Response from server had error, code ' + str(response.status_code) + ' ' + str(response))
+
+
+def chunk_list(data:list, size:int):
+    #Extra method to help chunk large files and avoid 504 error.
+    chunks = []
+    for i in range(0, len(data), size):
+        chunks.append(data[i: i+size])
+    return chunks
+
+
+def batch_lookup(strings:list[str], size: int=25, return_top_response:bool=True, return_synonyms:bool=False, **kwargs) -> dict:
+    """
+    A wrapper around the `bulk-lookup` api endpoint. Given a list of query strings, this returns a TranslatorNode object or a list of TranslatorNode objects corresponding to the given name. 
+
+    Parameters
+    ----------
+    strings : list[str]
+        List of query strings.
+    size : int
+        Desired chunking size, default is 25.
+    return_top_response : bool
+        If true, this returns only the top response per string. If false, this returns a list of all responses per string. Default: True
+    return_synonyms : bool
+        If true, the resulting TranslatorNode objects contain a list of synonyms. If false, they do not include synonyms. Default: False
+    **kwargs
+        Other arguments to `bulk-lookup`
+
+    Returns
+    -------
+    Dict of string : TranslatorNode object if return_top_response is True, list of TranslatorNode objects if return_top_response is False
+
+    Examples
+    --------
+    >>> batch_lookup(['AML', 'CML'])
+    {'AML': TranslatorNode(curie='MONDO:0018874', label='acute myeloid leukemia',...),
+     'CML': TranslatorNode(curie='MONDO:0010809', label='familial chronic myelocytic leukemia-like syndrome',...)}
+    """
+    path = urllib.parse.urljoin(URL, 'bulk-lookup')
+    curies = {}
+    chunks = chunk_list(strings, size)
+    for chunk in chunks:
+        payload = {
+            "strings": chunk,
+            **kwargs
+        }
+        response = requests.post(path, json = payload)
+        if response.status_code == 200:
+            result = response.json()
+            if(len(result) == 0):
+                raise LookupError('No matching CURIE found for the given strings ' + str(strings))
+            else:
+                for s in chunk:
+                    nodes = result.get(s, [])
+                    translator_nodes = []
+                    for node in nodes: 
+                        n = TranslatorNode(node['curie'])
+                        if 'label' in node:
+                            n.label = node['label']
+                        if 'types' in node:
+                            n.types = node['types']
+                        if return_synonyms and 'synonyms' in node:
+                            n.synonyms = node['synonyms']
+                        translator_nodes.append(n)
+                    if return_top_response:
+                        if translator_nodes:
+                            curies[s] = translator_nodes[0]
+                        else:
+                            curies[s] = None
+                    else:
+                        curies[s] = translator_nodes
+        else:
+            raise requests.RequestException('Response from server had error, code ' + str(response.status_code) + ' ' + str(response))
+    return curies
+
+
+
+================================================
+FILE: TCT/node_normalizer.py
+================================================
+"""
+This is a wrapper around the Node Normalizer API.
+
+API docs: https://nodenorm.transltr.io/docs
+"""
+import urllib.parse
+
+import requests
+
+from .translator_node import TranslatorNode
+
+
+URL = 'https://nodenorm.transltr.io/'
+
+def get_normalized_nodes(query: str | list[str],
+        return_equivalent_identifiers:bool=False,
+        **kwargs):
+    """
+    A wrapper around the `get_normalized_nodes` api endpoint. Given a CURIE or a list of CURIEs, this returns a list of normalized identifiers.
+    
+    Parameters
+    ----------
+    query : str
+        Query CURIE
+    return_equivalent_identifiers : bool
+        Whether or not to return a list of equivalent identifiers along with the TranslatorNode. Default: False
+    **kwargs
+        Other arguments to `get_normalized_nodes` (e.g. `conflate` for gene-protein conflation, `drug_chemical_conflate` for drug-chemical conflation)
+
+    Returns
+    -------
+    If query is a single CURIE, returns a single TranslatorNode.
+
+    If query is a list of CURIEs, a dict of CURIE id to TranslatorNode for every node in the query.
+
+    Examples
+    --------
+    >>> get_normalized_nodes('MESH:D014867', return_equivalent_identifiers=False)
+    TranslatorNode(curie='CHEBI:15377', label='Water', types=['biolink:SmallMolecule', 'biolink:MolecularEntity', 'biolink:ChemicalEntity', 'biolink:PhysicalEssence', 'biolink:ChemicalOrDrugOrTreatment', 'biolink:ChemicalEntityOrGeneOrGeneProduct', 'biolink:ChemicalEntityOrProteinOrPolypeptide', 'biolink:NamedThing', 'biolink:PhysicalEssenceOrOccurrent'], synonyms=None, curie_synonyms=None)
+    """
+    path = urllib.parse.urljoin(URL, 'get_normalized_nodes')
+    # default parameters: true for gene-protein conflation, false for drug-chemical conflation
+    response = requests.get(path, params={'curie': query, **kwargs})
+    if response.status_code == 200:
+        result = response.json()
+        if len(result) == 0:
+            raise LookupError('No matches found for the given input: ' + query)
+        else:
+            normalized_dict = {}
+            for k, node in result.items():
+                n = TranslatorNode(node['id']['identifier'])
+                if 'label' in node['id']:
+                    n.label = node['id']['label']
+                if 'type' in node:
+                    n.types = node['type']
+                if return_equivalent_identifiers and 'equivalent_identifiers' in node:
+                    synonyms = []
+                    curie_synonyms = []
+                    for eq in node['equivalent_identifiers']:
+                        if 'label' in eq:
+                            synonyms.append(eq['label'])
+                        else:
+                            synonyms.append(None)
+                        curie_synonyms.append(eq['identifier'])
+                    n.synonyms = synonyms
+                    n.curie_synonyms = curie_synonyms
+                normalized_dict[k] = n
+            if isinstance(query, str):
+                return normalized_dict[query]
+            return normalized_dict
+    else:
+        raise requests.RequestException('Response from server had error, code ' + str(response.status_code))
+
+
+
+================================================
+FILE: TCT/server.py
+================================================
+"""
+Translator Component Toolkit MCP Server
+
+This server provides access to biomedical translator tools including:
+- Name resolution and lookup
+- Node normalization 
+- Knowledge provider information
+- Meta knowledge graph operations
+- Query orchestration
+- TRAPI protocol support
+"""
+
+from fastmcp import FastMCP
+from mcp.shared.exceptions import McpError
+from mcp.types import ErrorData, INTERNAL_ERROR
+
+# Import functions from translator_component_toolkit modules using relative imports
+from .name_resolver import lookup, synonyms, batch_lookup
+from .node_normalizer import get_normalized_nodes
+from .translator_kpinfo import get_translator_kp_info
+from .translator_metakg import get_KP_metadata, add_new_API_for_query, add_plover_API
+from .translator_query import get_translator_API_predicates, optimize_query_json, query_KP, parallel_api_query
+from .trapi import query as trapi_query
+
+# Create unified MCP server
+mcp = FastMCP("translator-toolkit")
+
+# Name Resolver Tools
+@mcp.tool()
+def name_lookup(query: str, return_top_response: bool = True, return_synonyms: bool = False):
+    """
+    Look up a name/term and return normalized TranslatorNode information.
+    
+    Args:
+        query: Query string to look up
+        return_top_response: If true, returns only the top response; if false, returns all responses
+        return_synonyms: If true, includes synonyms in the result
+        
+    Returns:
+        TranslatorNode object(s) with curie, label, types, and optional synonyms
+    """
+    try:
+        return lookup(query, return_top_response, return_synonyms)
+    except Exception as e:
+        raise McpError(ErrorData(INTERNAL_ERROR, f"Name lookup error: {str(e)}")) from e
+
+@mcp.tool()
+def get_name_synonyms(query: str):
+    """
+    Get synonyms for a given CURIE.
+    
+    Args:
+        query: Query CURIE to get synonyms for
+        
+    Returns:
+        Dictionary of CURIE id to TranslatorNode information
+    """
+    try:
+        return synonyms(query)
+    except Exception as e:
+        raise McpError(ErrorData(INTERNAL_ERROR, f"Synonyms lookup error: {str(e)}")) from e
+
+@mcp.tool()
+def batch_name_lookup(strings: list[str], size: int = 25, return_top_response: bool = True, return_synonyms: bool = False):
+    """
+    Batch lookup multiple names/terms and return normalized TranslatorNode information.
+    
+    Args:
+        strings: List of query strings to look up
+        size: Chunking size for batch processing (default: 25)
+        return_top_response: If true, returns only the top response per string
+        return_synonyms: If true, includes synonyms in the results
+        
+    Returns:
+        Dictionary mapping strings to their TranslatorNode information
+    """
+    try:
+        return batch_lookup(strings, size, return_top_response, return_synonyms)
+    except Exception as e:
+        raise McpError(ErrorData(INTERNAL_ERROR, f"Batch lookup error: {str(e)}")) from e
+
+# Node Normalizer Tools
+@mcp.tool()
+def normalize_nodes(query: str, return_equivalent_identifiers: bool = False, conflate: bool = True, drug_chemical_conflate: bool = False):
+    """
+    Normalize node CURIEs using the Node Normalizer API.
+    
+    Args:
+        query: CURIE string or list of CURIEs to normalize
+        return_equivalent_identifiers: Whether to return equivalent identifiers
+        conflate: Enable gene-protein conflation (default: True)
+        drug_chemical_conflate: Enable drug-chemical conflation (default: False)
+        
+    Returns:
+        Normalized TranslatorNode(s) with curie, label, types, and optional synonyms
+    """
+    try:
+        return get_normalized_nodes(query, return_equivalent_identifiers, conflate=conflate, drug_chemical_conflate=drug_chemical_conflate)
+    except Exception as e:
+        raise McpError(ErrorData(INTERNAL_ERROR, f"Node normalization error: {str(e)}")) from e
+
+# Knowledge Provider Info Tools
+@mcp.tool()
+def get_kp_info():
+    """
+    Get SmartAPI Translator Knowledge Provider information.
+    
+    Returns:
+        Tuple of (DataFrame with KP info, Dictionary mapping API names to URLs)
+    """
+    try:
+        return get_translator_kp_info()
+    except Exception as e:
+        raise McpError(ErrorData(INTERNAL_ERROR, f"KP info error: {str(e)}")) from e
+
+# Meta Knowledge Graph Tools
+@mcp.tool()
+def get_metakg_data(api_names: dict):
+    """
+    Get metadata for Knowledge Providers including predicates, subjects, and objects.
+    
+    Args:
+        api_names: Dictionary mapping API names to URLs
+        
+    Returns:
+        DataFrame containing MetaKG information
+    """
+    try:
+        return get_KP_metadata(api_names)
+    except Exception as e:
+        raise McpError(ErrorData(INTERNAL_ERROR, f"MetaKG data error: {str(e)}")) from e
+
+@mcp.tool()
+def add_custom_api_to_metakg(api_names: dict, metakg_df, new_api_name: str, new_api_url: str, 
+                             new_api_predicate: str, new_api_subject: str, new_api_object: str):
+    """
+    Add a custom API to the knowledge graph metadata.
+    
+    Args:
+        api_names: Current API names dictionary
+        metakg_df: Current MetaKG DataFrame
+        new_api_name: Name of the new API
+        new_api_url: URL of the new API
+        new_api_predicate: Predicate for the new API
+        new_api_subject: Subject type for the new API
+        new_api_object: Object type for the new API
+        
+    Returns:
+        Tuple of (updated api_names dict, updated metakg DataFrame)
+    """
+    try:
+        return add_new_API_for_query(api_names, metakg_df, new_api_name, new_api_url, 
+                                     new_api_predicate, new_api_subject, new_api_object)
+    except Exception as e:
+        raise McpError(ErrorData(INTERNAL_ERROR, f"Add custom API error: {str(e)}")) from e
+
+@mcp.tool()
+def add_plover_apis_to_metakg(api_names: dict, metakg_df):
+    """
+    Add Plover APIs (CATRAX team APIs) to the knowledge graph metadata.
+    
+    Args:
+        api_names: Current API names dictionary
+        metakg_df: Current MetaKG DataFrame
+        
+    Returns:
+        Tuple of (updated api_names dict, updated metakg DataFrame)
+    """
+    try:
+        return add_plover_API(api_names, metakg_df)
+    except Exception as e:
+        raise McpError(ErrorData(INTERNAL_ERROR, f"Add Plover APIs error: {str(e)}")) from e
+
+# Query Tools
+@mcp.tool()
+def get_api_predicates():
+    """
+    Get the predicates supported by each Translator API.
+    
+    Returns:
+        Tuple of (API names dict, MetaKG DataFrame, API predicates dict)
+    """
+    try:
+        return get_translator_API_predicates()
+    except Exception as e:
+        raise McpError(ErrorData(INTERNAL_ERROR, f"API predicates error: {str(e)}")) from e
+
+@mcp.tool()
+def optimize_query_for_api(query_json: dict, api_name: str, api_predicates: dict):
+    """
+    Optimize a query JSON by removing predicates not supported by the selected API.
+    
+    Args:
+        query_json: TRAPI 1.5.0 format query
+        api_name: Name of the API to query
+        api_predicates: Dictionary of API names and their predicates
+        
+    Returns:
+        Modified query JSON with only supported predicates
+    """
+    try:
+        return optimize_query_json(query_json, api_name, api_predicates)
+    except Exception as e:
+        raise McpError(ErrorData(INTERNAL_ERROR, f"Query optimization error: {str(e)}")) from e
+
+@mcp.tool()
+def query_knowledge_provider(api_name: str, query_json: dict, api_names: dict, api_predicates: dict):
+    """
+    Query an individual Knowledge Provider API with a TRAPI 1.5.0 query.
+    
+    Args:
+        api_name: Name of the API to query
+        query_json: TRAPI 1.5.0 format query
+        api_names: Dictionary mapping API names to URLs
+        api_predicates: Dictionary of API names and their predicates
+        
+    Returns:
+        Query result from the API or None if no results
+    """
+    try:
+        return query_KP(api_name, query_json, api_names, api_predicates)
+    except Exception as e:
+        raise McpError(ErrorData(INTERNAL_ERROR, f"KP query error: {str(e)}")) from e
+
+@mcp.tool()
+def parallel_query_apis(query_json: dict, selected_apis: list[str], api_names: dict, api_predicates: dict, max_workers: int = 1):
+    """
+    Query multiple APIs in parallel and merge results into a single knowledge graph.
+    
+    Args:
+        query_json: TRAPI 1.5.0 format query
+        selected_apis: List of API names to query
+        api_names: Dictionary mapping API names to URLs
+        api_predicates: Dictionary of API names and their predicates
+        max_workers: Number of parallel workers (default: 1)
+        
+    Returns:
+        Merged knowledge graph from all successful API responses
+    """
+    try:
+        return parallel_api_query(query_json, selected_apis, api_names, api_predicates, max_workers)
+    except Exception as e:
+        raise McpError(ErrorData(INTERNAL_ERROR, f"Parallel query error: {str(e)}")) from e
+
+# TRAPI Tools
+@mcp.tool()
+def trapi_query_endpoint(url: str):
+    """
+    Query a TRAPI endpoint (currently unimplemented - placeholder).
+    
+    Args:
+        url: The URL for the TRAPI API endpoint
+        
+    Returns:
+        TODO: Implementation needed
+    """
+    try:
+        return trapi_query(url)
+    except Exception as e:
+        raise McpError(ErrorData(INTERNAL_ERROR, f"TRAPI query error: {str(e)}")) from e
+    
+
+
+
+================================================
+FILE: TCT/translator_kpinfo.py
+================================================
+
+# used May 30, 2025
+
+import requests
+import json
+import pandas as pd
+
+"""This is the root URL for the resource."""
+URL = 'https://smart-api.info/api/query?q=tags.name:translator'
+
+def get_translator_kp_info() -> tuple[pd.DataFrame, dict[str, str]]:
+    """
+    Get the SmartAPI Translator KP info from the smart-api.info API.
+    Returns a DataFrame with the SmartAPI Translator KP info.
+
+    Returns
+    -------
+    smartapi_df : pandas.DataFrame
+        Dataframe containing information about the APIS [TODO]
+
+    API_names : dict
+        dict of API names to URLs
+
+
+    Examples
+    --------
+    >>> Translator_KP_info, APInames = get_translator_kp_info()
+    >>> print(Translator_KP_info.head())
+    """
+    # Get x-bte smartapi specs
+    url = "https://smart-api.info/api/query?q=tags.name:translator AND tags.name:trapi&size=1000&sort=_seq_no&raw=1&fields=paths,servers,tags,components.x-bte*,info,_meta"
+    response = requests.get(url)
+    try:
+        response.raise_for_status()
+    except Exception:
+        print(f"error downloading smartapi specs: {response.status_code}")
+        exit()
+
+    content = json.loads(response.content)
+    smartapis = content["hits"]
+
+    id_list = []
+    title_list = []
+    prod_url_list = []
+    ci_url_list = []
+    test_url_list = []
+    for api in smartapis:
+        
+        
+        ci_found = False
+        test_found = False
+        prod_found = False
+        for i in range(len(api['servers'])):
+            
+            server = api['servers'][i]
+            if 'x-maturity' not in server:
+                print(f"Skipping server without x-maturity: {server}")
+                
+            else:
+                if server['x-maturity'] == 'production':
+                    # if prod_ur is not ars-prod.transltr.io
+                    if server['url'] == 'https://ars-prod.transltr.io':
+                        prod_url = server['url'] + '/ars/api/submit/'
+                    else:
+                        # if prod_url does not end with /, add '/query/' to the end
+                        if server['url'].endswith('/'):
+                            prod_url = server['url'] + 'query/'
+                        else:
+                            # if prod_url does not end with /, add '/query/' to the end
+                            prod_url = server['url'] + '/query/'
+                    
+                    prod_found = True
+                
+                if server['x-maturity'] == 'staging' or server['x-maturity'] == 'development':
+                    # if ci_url is not ars.ci.transltr.io
+                    if server['url'] == 'https://ars.ci.transltr.io':
+                        ci_url = server['url'] + '/ars/api/submit/'
+                    else:
+                        # if ci_url does not end with /, add '/query/' to the end
+                        if server['url'].endswith('/'):
+                            ci_url = server['url'] + 'query/'
+                        else:
+                            # if ci_url does not end with /, add '/query/' to the end
+                            ci_url = server['url'] + '/query/'
+                    ci_found = True
+
+                if server['x-maturity'] == 'testing':
+                    # if test_url is not ars-test.transltr.io
+                    if server['url'] == 'https://ars.test.transltr.io':
+                        test_url = server['url'] + '/ars/api/submit/'
+                    else:
+                        # if test_url does not end with /, add '/query/' to the end
+                        if server['url'].endswith('/'):
+                            test_url = server['url'] + 'query/'
+                        else:
+                            # if test_url does not end with /, add '/query/' to the end
+                            test_url = server['url'] + '/query/'
+
+                    test_found = True
+
+        if not (prod_found or ci_found or test_found):
+            print(api['info']['title'])
+            print(f"Skipping server without production, staging or testing: {server}")
+        else:
+            id_list.append('https://smart-api.info/ui/'+api['_id'])
+            title_list.append(api['info']['title'])
+            if prod_found:
+                prod_url_list.append(prod_url)
+            else:
+                prod_url = prod_url_list.append(None)
+
+            if ci_found:
+                ci_url_list.append(ci_url)
+            else:
+                ci_url = ci_url_list.append(None)
+            if test_found:
+                test_url_list.append(test_url)
+            else:
+                test_url = test_url_list.append(None)
+                
+    # write all the smartapis to a dataframe
+
+    smartapi_df = pd.DataFrame({
+        'id': id_list,
+        'title': title_list,
+        'prod_url': prod_url_list,
+        'ci_url': ci_url_list,
+        'test_url': test_url_list,
+    })
+    
+    API_names = {}
+    for i in range(len(smartapi_df)):
+        if prod_url_list[i] is not None:
+            #API_names[smartapi_df['title'][i]] = smartapi_df['prod_url'][i] + 'query/'
+            API_names[smartapi_df['title'].values[i]] = prod_url_list[i]
+        else:
+            API_names[smartapi_df['title'].values[i]] = ci_url_list[i] 
+    return smartapi_df, API_names
+
+
+
+================================================
+FILE: TCT/translator_metakg.py
+================================================
+import requests
+import json
+import pandas as pd
+
+
+def find_link(name):
+    #pre = "https://dev.smart-api.info/api/metakg/consolidated?size=2000&q=%28api.x-translator.component%3AKP+AND+api.name%3A" # This works for the previous version
+    pre = "https://smart-api.info/api/metakg/consolidated?size=2000&q=%28api.x-translator.component%3AKP+AND+api.name%3A" 
+    end = "%5C%28Trapi+v1.5.0%5C%29%29"
+    if '(Trapi v1.5.0)' in name:
+        url = pre
+        name_raw = name.split("(")[0]
+        words = name_raw.split(" ")
+    
+        length = len(words)
+        if length == 1:
+            url = url + words[0] + end
+        else:
+            for i in range(0,length-1):
+                url = url + words[i] + "+"
+            url = url+words[length-1]+end
+    
+    else:
+        words = name.split(" ")
+        url = pre
+        length = len(words)
+        
+        for i in range(0,length-1):
+            url = url + words[i] + "+"
+        url = url+words[length-1]+"%29"
+    return(url)
+
+
+def get_KP_metadata(APInames:dict[str, str]) -> pd.DataFrame:
+    '''
+    This function is used to get the metadata of the KPs in the APInames dictionary.
+
+    Parameters
+    ----------
+    APInames : dict
+        This is the second output of `TCT.translator_kpinfo.get_translator_kpinfo()`. This is a dict of API name to API URL.
+
+    Returns
+    -------
+    metaKG : pandas.DataFrame
+        This is a dataframe that represents the meta KG for the KPs in the APInames input - columns include [TODO].
+
+    Examples
+    --------
+    >>> metaKG = get_KP_metadata(APInames) 
+    >>> All_predicates = list(set(metaKG['Predicate']))
+    All_categories = list((set(list(set(metaKG['Subject']))+list(set(metaKG['Object'])))))
+    '''
+
+    result_df = pd.DataFrame()
+    API_list = []
+    Predicate_list = []
+    subject_list = []
+    object_list = []
+    url_list = []
+    #for KP in KPnames:
+    for KP in APInames.keys():
+        json_text ={}
+        if KP == "RTX KG2 - TRAPI 1.5.0": 
+            text =requests.get("https://smart-api.info/api/metakg/consolidated?size=20&q=%28api.x-translator.component%3AKP+AND+api.name%3ARTX+KG2+%5C-+TRAPI+1%5C.4%5C.0%29").text  # This works for the previous version
+            json_text = json.loads(text)
+        else:   
+            text = requests.get(find_link(KP)).text
+            json_text = json.loads(text)
+
+        for i in (json_text['hits']):
+            Predicate_list.append("biolink:"+i['_id'].split("-")[1])
+            API_list.append(KP)
+            subject_list.append('biolink:'+i['_id'].split("-")[0])
+            object_list.append('biolink:'+i['_id'].split("-")[2])
+            url_list.append(APInames[KP])
+
+    result_df = pd.DataFrame({ 'API': API_list, 'Predicate': Predicate_list, "Subject":subject_list, "Object":object_list, "URL":url_list})
+    
+    return(result_df)
+
+
+def add_new_API_for_query(APInames:dict[str, str], metaKG:pd.DataFrame, newAPIname:str, newAPIurl:str, newAPIpredicate:str, newAPIsubject:str, newAPIobject:str):
+    '''
+    This function is used to add a new API beyond the current list of APIs for query
+
+    Parameters
+    ----------
+    APInames : dict
+        This is the second output of `TCT.translator_kpinfo.get_translator_kpinfo()`.
+
+    metaKG : pandas.DataFrame
+        This is the output of `get_kp_metadata`.
+
+    newAPIname : str
+
+    newAPIurl : str
+
+    newAPIpredicate : str
+
+    newAPIsubject : str
+
+    newAPIobject : str
+
+
+    Returns
+    -------
+
+    Examples
+    --------
+    >>> APInames, metaKG = add_new_API_for_query(APInames, metaKG, "BigGIM_BMG", "http://127.0.0.1:8000/find_path_by_predicate", "Gene-physically_interacts_with-gene", "Gene", "Gene")
+
+    '''
+    APInames[newAPIname] = newAPIurl
+
+    new_row = pd.DataFrame({"API":newAPIname,
+                            "Predicate":newAPIpredicate,
+                            "Subject":newAPIsubject, "Object":newAPIobject,
+                            "URL":newAPIurl}, index=[0])
+    metaKG = pd.concat([metaKG, new_row], ignore_index=True)
+    return APInames, metaKG
+
+
+def add_plover_API(APInames:dict[str, str], metaKG:pd.DataFrame):
+    '''
+    This function is used to add the Plover APIs developed by the CATRAX team to the APInames and metaKG.
+
+    Current APIs include :
+    CATRAX BigGIM DrugResponse Performance Phase, 
+    CATRAX Pharmacogenomics, 
+    Clinical Trials, 
+    Drug Approvals, 
+    Multiomics, 
+    Microbiome, 
+    and RTX KG2.
+
+    Parameters
+    ----------
+    APInames : dict
+        This is the second output of `TCT.translator_kpinfo.get_translator_kpinfo()`. This is a dict of API name to API URL.
+
+    metaKG : pandas.DataFrame
+        This is the output of `get_kp_metadata`.
+
+
+
+
+    Examples
+    --------
+    >>> APInames, metaKG = add_plover_API(APInames, metaKG)
+    '''
+    import requests
+    url = 'https://multiomics.rtx.ai:9990/BigGIM_DrugResponse_PerformancePhase/meta_knowledge_graph'
+    response = requests.get(url)
+    data = response.json()
+    for i in range(len(data["edges"])):
+        APInames, metaKG = add_new_API_for_query(APInames, metaKG, "CATRAX BigGIM DrugResponse Performance Phase KP - TRAPI 1.5.0", "https://multiomics.rtx.ai:9990/BigGIM_DrugResponse_PerformancePhase/query", data["edges"][i]['predicate'], data["edges"][i]['subject'], data["edges"][i]['object'])
+
+    url = 'https://multiomics.rtx.ai:9990/PharmacogenomicsKG/meta_knowledge_graph'
+    response = requests.get(url)
+    data = response.json()
+    for i in range(len(data["edges"])):
+        APInames, metaKG = add_new_API_for_query(APInames, metaKG, "CATRAX Pharmacogenomics KP - TRAPI 1.5.0", "https://multiomics.rtx.ai:9990/PharmacogenomicsKG/query", data["edges"][i]['predicate'], data["edges"][i]['subject'], data["edges"][i]['object'])
+
+    url = 'https://multiomics.rtx.ai:9990/ctkp/meta_knowledge_graph'
+    response = requests.get(url)
+    data = response.json()
+    for i in range(len(data["edges"])):
+        APInames, metaKG = add_new_API_for_query(APInames, metaKG, "Clinical Trials KP - TRAPI 1.5.0", "https://multiomics.rtx.ai:9990/ctkp/query", data["edges"][i]['predicate'], data["edges"][i]['subject'], data["edges"][i]['object'])
+
+    url = 'https://multiomics.rtx.ai:9990/dakp/meta_knowledge_graph'
+    response = requests.get(url)
+    data = response.json()
+    for i in range(len(data["edges"])):
+        APInames, metaKG = add_new_API_for_query(APInames, metaKG, "Drug Approvals KP - TRAPI 1.5.0", "https://multiomics.rtx.ai:9990/dakp/query", data["edges"][i]['predicate'], data["edges"][i]['subject'], data["edges"][i]['object'])
+
+    url = 'https://multiomics.rtx.ai:9990/mokp/meta_knowledge_graph'
+    response = requests.get(url)
+    data = response.json()
+    for i in range(len(data["edges"])):
+        APInames, metaKG = add_new_API_for_query(APInames, metaKG, "Multiomics KP - TRAPI 1.5.0", "https://multiomics.rtx.ai:9990/multiomics/query", data["edges"][i]['predicate'], data["edges"][i]['subject'], data["edges"][i]['object'])
+
+    url = 'https://multiomics.rtx.ai:9990/mbkp/meta_knowledge_graph'
+    response = requests.get(url)
+    data = response.json()
+    for i in range(len(data["edges"])):
+        APInames, metaKG = add_new_API_for_query(APInames, metaKG, "Microbiome KP - TRAPI 1.5.0", "https://multiomics.rtx.ai:9990/mbkp/query", data["edges"][i]['predicate'], data["edges"][i]['subject'], data["edges"][i]['object'])
+
+
+    url = 'https://kg2cploverdb.ci.transltr.io/meta_knowledge_graph'
+    response = requests.get(url)
+    data = response.json()
+    for i in range(len(data["edges"])):
+        APInames, metaKG = add_new_API_for_query(APInames, metaKG, "RTX KG2 - TRAPI 1.5.0", "https://kg2cploverdb.ci.transltr.io/kg2c/query", data["edges"][i]['predicate'], data["edges"][i]['subject'], data["edges"][i]['object'])
+
+    
+    return APInames, metaKG
+
+def load_translator_resources():
+    """
+    Load the necessary resources for the Translator.
+
+    Returns
+    -------
+    APInames
+    metaKG
+    Translator_KP_info
+    """
+    from .translator_kpinfo import get_translator_kp_info
+    Translator_KP_info, APInames = get_translator_kp_info()
+    metaKG = get_KP_metadata(APInames)
+    APInames, metaKG = add_plover_API(APInames, metaKG)
+    return  APInames, metaKG, Translator_KP_info
+
+
+
+================================================
+FILE: TCT/translator_node.py
+================================================
+# translator graph node
+from dataclasses import dataclass
+
+@dataclass
+class TranslatorNode:
+    """
+    Class for Translator graph nodes.
+    """
+
+    curie: str
+    "CURIE identifier"
+
+    label: str | None = None
+    "human-readable name for the node"
+
+    types: list[str] | None = None
+    "list of biolink types"
+
+    # TODO: add quantifiers/qualifiers?
+    # TODO: add edges too?
+
+    synonyms: list[str] | None = None
+    "list of synonymous labels"
+
+    curie_synonyms: list[str] | None = None
+    "list of synonymous CURIE ids (in the same order as synonyms)"
+
+    # identifier is just another way to access/set the CURIE.
+    @property
+    def identifier(self):
+        """identifier is the CURIE id for the node."""
+        return self.curie
+
+    @identifier.setter
+    def identifier(self, i):
+        """identifier is the CURIE id for the node."""
+        self.curie = i
+
+@dataclass
+class TranslatorEdge:
+    """
+    Class that represents Translator edges.
+    """
+
+    subject: str
+    "The subject is a CURIE id for a node."
+
+    object: str
+    "The object is a CURIE id for a node."
+
+    predicate: str
+    "Predicates"
+
+
+
+================================================
+FILE: TCT/translator_query.py
+================================================
+import requests
+from copy import deepcopy
+import pandas
+from TCT import translator_metakg
+from TCT import translator_kpinfo
+
+def get_translator_API_predicates() -> tuple[dict, pandas.DataFrame, dict]:
+    '''
+    Get the predicates supported by each API.
+
+    Returns
+    --------
+    API_names : dict[str, str]
+          dict of API names to URLs
+
+    metaKG : pandas.DataFrame
+          This is a dataframe that represents the meta KG for the KPs in the APInames input -   columns include [TODO].
+
+    API_predicates : dict[str, list]
+        A dictionary of API names and a list of their predicates.
+
+    Examples
+    --------
+    >>> API_names, metaKG, API_predicates = get_translator_API_predicates()
+    '''
+    Translator_KP_info,APInames= translator_kpinfo.get_translator_kp_info()
+    print(len(Translator_KP_info))
+    # Step 2: Get metaKG and all predicates from Translator APIs through the SmartAPI system
+    metaKG = translator_metakg.get_KP_metadata(APInames) 
+    print(metaKG.shape)
+    # Add metaKG from Plover API based KG resources
+    APInames,metaKG = translator_metakg.add_plover_API(APInames, metaKG)
+    print(metaKG.shape)
+    # Step 3: list metaKG information
+    # All_predicates = list(set(metaKG['Predicate']))  # Unused variable
+    # All_categories = list((set(list(set(metaKG['Subject']))+list(set(metaKG['Object'])))))  # Unused variable
+    API_withMetaKG = list(set(metaKG['API']))
+
+    # generate a dictionary of API and its predicates
+    API_predicates = {}
+    for api in API_withMetaKG:
+        API_predicates[api] = list(set(metaKG[metaKG['API'] == api]['Predicate']))
+
+    return APInames, metaKG, API_predicates
+
+def optimize_query_json(query_json, API_name_cur, API_predicates):
+    '''
+    Optimize the query JSON by removing predicates that are not supported by the selected APIs.
+
+    Parameters
+    ----------
+    query_json1 : str
+        a query in TRAPI 1.5.0 format
+    API_name_cur : str
+        the name of the API to query
+    API_predicates : dict
+        a dictionary of API names and their predicates
+
+    Returns
+    --------
+    A modified query JSON with only the predicates supported by the selected APIs.
+    
+    Examples
+    --------
+    >>> 
+    '''
+    query_json_cur = query_json.copy()  # copy the query_json to avoid modifying the original query_json
+    # Get the list of APIs that support the predicates in the query
+    shared_predicates = list(set(API_predicates[API_name_cur]).intersection(query_json_cur['message']['query_graph']['edges']['e00']['predicates'] ))
+    
+    if len(shared_predicates) > 0:
+        query_json_cur['message']['query_graph']['edges']['e00']['predicates'] = shared_predicates
+        #print(API_name_cur + ": Predicates optimized to: " + str(shared_predicates))
+    else:
+        #print(API_name_cur + ": No shared predicates found. Using all predicates in the query.")
+        # If no shared predicates, keep the original predicates
+        query_json_cur['message']['query_graph']['edges']['e00']['predicates'] = query_json_cur['message']['query_graph']['edges']['e00']['predicates']
+
+    return query_json_cur
+
+def query_KP(API_name_cur, query_json, APInames, API_predicates):
+    """
+    Query an individual API with a TRAPI 1.5.0 query JSON,
+    without modifying the original query_json.
+    """
+    API_url_cur = APInames[API_name_cur]
+    # deep‐copy so we never touch the caller’s data
+    query_copy = deepcopy(query_json)
+    # optimize on our private copy
+    query_json_cur = optimize_query_json(query_copy, API_name_cur, API_predicates)
+    response = requests.post(API_url_cur, json=query_json_cur)
+    if response.status_code == 200:
+        result = response.json().get("message", {})
+        kg = result.get("knowledge_graph", {})
+        edges = kg.get("edges", {})
+        if edges:
+            print(f"{API_name_cur}: Success!")
+            return result
+        elif "knowledge_graph" in result:
+            return None
+            #print(f"{API_name_cur}: No result returned")
+    else:
+        #print(f"{API_name_cur}: Warning Code: {response.status_code}")
+        return None
+
+def parallel_api_query(query_json, select_APIs, APInames, API_predicates,max_workers=1):
+    '''
+    Queries multiple APIs in parallel and merges the results into a single knowledge graph.
+
+    Parameters
+    ----------
+    URLS
+        list of API URLs to query
+    query_json
+        the query JSON to be sent to each API
+    max_workers
+        number of parallel workers to use for querying
+
+    Returns
+    -------
+    Returns a merged knowledge graph from all successful API responses.
+
+    Examples
+    --------
+    >>> result = TCT.parallel_api_query(API_URLs,query_json=query_json, max_workers=len(API_URLs1))
+
+    '''
+    # Parallel query
+    result = []
+    no_results_returned = []
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from copy import deepcopy
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # copy the query_json for each API to avoid modifying the original query_json
+        query_json_cur = deepcopy(query_json)
+        future_to_url = {executor.submit(query_KP, API_name_cur, query_json_cur, APInames, API_predicates): API_name_cur for API_name_cur in select_APIs}
+
+        for future in as_completed(future_to_url):
+            url = future_to_url[future]
+            try:
+                data = future.result()
+                if 'knowledge_graph' in data:
+                    result.append(data)
+            except Exception as exc:
+                no_results_returned.append(url)
+                #print('%r generated an exception: %s' % (url, exc))
+    
+    included_KP_ID = []
+    for i in range(0,len(result)):
+        if result[i]['knowledge_graph'] is not None:
+            if 'knowledge_graph' in result[i]:
+                if 'edges' in result[i]['knowledge_graph']:
+                    if len(result[i]['knowledge_graph']['edges']) > 0:
+                        included_KP_ID.append(i)
+
+    result_merged = {}
+    for i in included_KP_ID:
+        result_merged = {**result_merged, **result[i]['knowledge_graph']['edges']}
+
+    len(result_merged)
+
+    return(result_merged)
+
+
+
+================================================
+FILE: TCT/trapi.py
+================================================
+"""
+This is a wrapper around making calls to the Translator Reasoner API (TRAPI).
+
+API Documentation: https://github.com/NCATSTranslator/ReasonerAPI
+
+Additional API Documentation: https://github.com/NCATSTranslator/ReasonerAPI/blob/master/docs/reference.md
+"""
+import json
+
+import requests
+
+# TODO: incorporate object ids into the method.
+def build_query(subject_ids:list[str],
+        object_categories:list[str], predicates:list[str],
+        return_json:bool=True,
+        object_ids=None, subject_categories=None):
+    """
+    This constructs a query json for use with TRAPI. Queries are of the form [subject_ids]-[predicates]-[object_categories].
+    The output for the query contains all the subject-predicate-object triples where the subject is in subject_ids,
+    the object's category is in object_categories, and the predicate for the edge is in predicates.
+
+    For a description of the existing biolink categories and predicates, see https://biolink.github.io/biolink-model/
+
+    Params
+    ------
+    subject_ids
+        A list of subject CURIE IDs - example: ["NCBIGene:3845"]
+
+    object_categories
+        A list of strings representing the object categories that we are interested in. Example: ["biolink:Gene"]
+
+    predicates
+        A list of predicates that we are interested in. Example: ["biolink:positively_correlated_with", "biolink:physically_interacts_with"].
+
+    return_json
+        If true, returns a json string; if false, returns a dict.
+
+    object_ids
+        None by default
+    subject_categories
+        None by default
+
+    Returns
+    -------
+    A json string
+
+    Examples
+    --------
+    In this example, we want all genes that physically interact with gene 3845.
+    >>> build_query(['NCBIGene:3845'], ['biolink:Gene'], ['biolink:physically_interacts_with'])
+    "{'message': {'query_graph': {
+        'edges': {'e00': {'subject': 'n00', 'object': 'n01', 'predicates':['biolink:physically_interacts_with]}},
+        'nodes': {'n00': {'ids': ['NCBIGene:3845']}, 'n01': {'categories': ['biolink':Gene']}}}}}"
+    """
+    query_dict = {
+        'message': {
+            'query_graph': {
+                'edges': {
+                    'e00': {
+                        'subject': 'n00',
+                        'object': 'n01',
+                        'predicates': predicates
+                    }
+                },
+                'nodes': {
+                    'n00': {
+                        'ids': subject_ids
+                    },
+                    'n01': {
+                        'categories': object_categories
+                    }
+                },
+            }
+        }
+    }
+    if return_json:
+        return json.dumps(query_dict)
+    else:
+        return query_dict
+
+
+def process_result(result:dict):
+    """
+    Processes a TRAPI query result, returning a table of edges.
+
+    Params
+    ------
+
+    Returns
+    -------
+
+    Examples
+    --------
+    """
+
+
+def query(url:str, query:str):
+    """
+    Queries a single TRAPI endpoint.
+
+    Params
+    ------
+    url : str
+        The URL for the API endpoint.
+    query : str
+        A JSON string representing the query, as produced by build_query
+
+    Returns
+    -------
+    A dict representing a result.
+
+    Examples
+    --------
+    >>> query = build_query(['NCBIGene:3845'], ['biolink:Gene'], ['biolink:physically_interacts_with'])
+    >>> response = query(url, query)
+    >>> print(response)
+    """
+    # example: 1. get APIs, 2. get APIs that have the target object and subject types, and the target predicates. 3. build the query and run the query.
+    response = requests.post(url, json=query)
+    if response.status_code == 200:
+        # TODO
+        result = response.json().get("message", {})
+        kg = result.get("knowledge_graph", {})
+        edges = kg.get("edges", {})
+        if edges:
+            return result
+        elif "knowledge_graph" in result:
+            return None
+    else:
+        raise requests.RequestException('Response from server had error, code ' + str(response.status_code) + ' ' + str(response))
+
+
+def parallel_query(url_list:list[str]):
+    """
+    """
+
+
+
+================================================
+FILE: TCT/.ipynb_checkpoints/__init__-checkpoint.py
+================================================
+[Empty file]
+
+
+================================================
+FILE: tests/__init__.py
+================================================
+# Test package
+
+
+================================================
+FILE: tests/test_basic.py
+================================================
+"""Basic tests for TCT package."""
+
+import TCT
+
+
+def test_import():
+    """Test that TCT can be imported successfully."""
+    assert TCT is not None
+
+
+def test_basic_functions_exist():
+    """Test that key functions are available."""
+    assert hasattr(TCT, 'TCT_help')
+    assert hasattr(TCT, 'list_functions')
+    assert hasattr(TCT, 'get_Translator_APIs')
+
+
+def test_tct_help_callable():
+    """Test that TCT_help function is callable."""
+    assert callable(TCT.TCT_help)
+
+
+================================================
+FILE: tests/test_main.py
+================================================
+"""Simple tests for main.py MCP server entry point."""
+
+import inspect
+
+
+def test_main_entry_point_exists():
+    """Test that main.py has the entry point function."""
+    import main
+    
+    assert hasattr(main, 'main')
+    assert callable(main.main)
+
+
+def test_main_imports_mcp_server():
+    """Test that main.py imports the MCP server for orchestrating agent access."""
+    import main
+    
+    assert hasattr(main, 'mcp')
+    assert main.mcp is not None
+
+
+def test_main_function_simple():
+    """Test that main() function is simple wrapper."""
+    import main
+    
+    # Should be a simple function with no parameters
+    sig = inspect.signature(main.main)
+    assert len(sig.parameters) == 0
+    
+    # Should have proper docstring
+    assert main.main.__doc__ is not None
+    assert "Entry point" in main.main.__doc__
+
+
+================================================
+FILE: tests/test_server.py
+================================================
+"""Simple tests for TCT MCP Server functionality."""
+
+from TCT.server import mcp
+
+
+def test_mcp_server_exists():
+    """Test that MCP server instance exists and has correct name."""
+    assert mcp is not None
+    assert mcp.name == "translator-toolkit"
+
+
+def test_mcp_server_ready():
+    """Test that MCP server is ready for orchestrating agent access."""
+    # Check that the server has the FastMCP functionality needed for agents
+    assert hasattr(mcp, 'run'), "MCP server should be runnable for agents"
+    assert mcp.name == "translator-toolkit", "MCP server should have correct name for agents"
+
+
+def test_mcp_tools_accessible():
+    """Test that MCP tools are accessible to orchestrating agent."""
+    from TCT.server import name_lookup, normalize_nodes
+    
+    # These should exist as tool objects that agents can call
+    assert name_lookup is not None, "name_lookup tool should be accessible"
+    assert normalize_nodes is not None, "normalize_nodes tool should be accessible"
+
+
+================================================
+FILE: .github/workflows/codespell.yml
+================================================
+---
+name: Codespell
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types:
+    - opened
+    - reopened
+    - synchronize
+    - ready_for_review
+
+permissions:
+  contents: read
+
+jobs:
+  codespell:
+    name: Check for spelling errors
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+      - name: Run codespell via Makefile
+        run: make spell
+
+
+================================================
+FILE: .github/workflows/main.yml
+================================================
+name: Tests
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
+      with:
+        version: "latest"
+
+    - name: Set up Python ${{ matrix.python-version }}
+      run: uv python install ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: uv sync --all-extras --dev
+
+    - name: Lint with ruff
+      run: |
+        uv run ruff check .
+        uv run ruff format --check .
+      continue-on-error: true
+
+    - name: Type check with mypy
+      run: uv run mypy TCT/
+      continue-on-error: true
+
+    - name: Run tests with pytest
+      run: uv run pytest tests/ -v --cov=TCT --cov-report=xml
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false
+
+
+
+================================================
+FILE: .github/workflows/sphinx.yml
+================================================
+name: "Sphinx: Render docs"
+
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - name: Install Sphinx & Dependencies
+      run: pip install -r docs/requirements.txt
+    - name: Install current package
+      run: pip install .
+    - name: Build Documentation
+      run: cd "$GITHUB_WORKSPACE/docs" && make html
+    - name: Deploy
+      uses: peaceiris/actions-gh-pages@v4
+      if: github.ref == 'refs/heads/main'
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: docs/build/html
+
+

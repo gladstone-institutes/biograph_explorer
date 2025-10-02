@@ -1,0 +1,642 @@
+[
+  {
+    "gene": {
+      "original": "IFITM3",
+      "curie": "NCBIGene:10410",
+      "label": null,
+      "types": [
+        "biolink:Gene",
+        "biolink:GeneOrGeneProduct",
+        "biolink:GenomicEntity",
+        "biolink:ChemicalEntityOrGeneOrGeneProduct",
+        "biolink:PhysicalEssence",
+        "biolink:OntologyClass",
+        "biolink:BiologicalEntity",
+        "biolink:ThingWithTaxon",
+        "biolink:NamedThing",
+        "biolink:Entity",
+        "biolink:PhysicalEssenceOrOccurrent",
+        "biolink:MacromolecularMachineMixin",
+        "biolink:Protein",
+        "biolink:GeneProductMixin",
+        "biolink:Polypeptide",
+        "biolink:ChemicalEntityOrProteinOrPolypeptide"
+      ]
+    },
+    "disease_curie": "MONDO:0100096",
+    "query_graph": {
+      "nodes": {
+        "n0": {
+          "ids": [
+            "NCBIGene:10410"
+          ],
+          "categories": [
+            "biolink:Gene"
+          ]
+        },
+        "n1": {
+          "categories": [
+            "biolink:NamedThing"
+          ]
+        },
+        "n2": {
+          "ids": [
+            "MONDO:0100096"
+          ],
+          "categories": [
+            "biolink:Disease"
+          ]
+        }
+      },
+      "edges": {
+        "e0": {
+          "subject": "n0",
+          "object": "n1"
+        },
+        "e1": {
+          "subject": "n1",
+          "object": "n2"
+        }
+      }
+    },
+    "timestamp": "2025-10-02T14:25:12.983340",
+    "status": "placeholder",
+    "message": "TCT implementation pending"
+  },
+  {
+    "gene": {
+      "original": "STAT5A",
+      "curie": "NCBIGene:6776",
+      "label": null,
+      "types": [
+        "biolink:Gene",
+        "biolink:GeneOrGeneProduct",
+        "biolink:GenomicEntity",
+        "biolink:ChemicalEntityOrGeneOrGeneProduct",
+        "biolink:PhysicalEssence",
+        "biolink:OntologyClass",
+        "biolink:BiologicalEntity",
+        "biolink:ThingWithTaxon",
+        "biolink:NamedThing",
+        "biolink:Entity",
+        "biolink:PhysicalEssenceOrOccurrent",
+        "biolink:MacromolecularMachineMixin",
+        "biolink:Protein",
+        "biolink:GeneProductMixin",
+        "biolink:Polypeptide",
+        "biolink:ChemicalEntityOrProteinOrPolypeptide"
+      ]
+    },
+    "disease_curie": "MONDO:0100096",
+    "query_graph": {
+      "nodes": {
+        "n0": {
+          "ids": [
+            "NCBIGene:6776"
+          ],
+          "categories": [
+            "biolink:Gene"
+          ]
+        },
+        "n1": {
+          "categories": [
+            "biolink:NamedThing"
+          ]
+        },
+        "n2": {
+          "ids": [
+            "MONDO:0100096"
+          ],
+          "categories": [
+            "biolink:Disease"
+          ]
+        }
+      },
+      "edges": {
+        "e0": {
+          "subject": "n0",
+          "object": "n1"
+        },
+        "e1": {
+          "subject": "n1",
+          "object": "n2"
+        }
+      }
+    },
+    "timestamp": "2025-10-02T14:25:12.983599",
+    "status": "placeholder",
+    "message": "TCT implementation pending"
+  },
+  {
+    "gene": {
+      "original": "DPP4",
+      "curie": "NCBIGene:1803",
+      "label": null,
+      "types": [
+        "biolink:Gene",
+        "biolink:GeneOrGeneProduct",
+        "biolink:GenomicEntity",
+        "biolink:ChemicalEntityOrGeneOrGeneProduct",
+        "biolink:PhysicalEssence",
+        "biolink:OntologyClass",
+        "biolink:BiologicalEntity",
+        "biolink:ThingWithTaxon",
+        "biolink:NamedThing",
+        "biolink:Entity",
+        "biolink:PhysicalEssenceOrOccurrent",
+        "biolink:MacromolecularMachineMixin",
+        "biolink:Protein",
+        "biolink:GeneProductMixin",
+        "biolink:Polypeptide",
+        "biolink:ChemicalEntityOrProteinOrPolypeptide"
+      ]
+    },
+    "disease_curie": "MONDO:0100096",
+    "query_graph": {
+      "nodes": {
+        "n0": {
+          "ids": [
+            "NCBIGene:1803"
+          ],
+          "categories": [
+            "biolink:Gene"
+          ]
+        },
+        "n1": {
+          "categories": [
+            "biolink:NamedThing"
+          ]
+        },
+        "n2": {
+          "ids": [
+            "MONDO:0100096"
+          ],
+          "categories": [
+            "biolink:Disease"
+          ]
+        }
+      },
+      "edges": {
+        "e0": {
+          "subject": "n0",
+          "object": "n1"
+        },
+        "e1": {
+          "subject": "n1",
+          "object": "n2"
+        }
+      }
+    },
+    "timestamp": "2025-10-02T14:25:12.983659",
+    "status": "placeholder",
+    "message": "TCT implementation pending"
+  },
+  {
+    "gene": {
+      "original": "KLRG1",
+      "curie": "NCBIGene:611464",
+      "label": null,
+      "types": [
+        "biolink:Gene",
+        "biolink:GeneOrGeneProduct",
+        "biolink:GenomicEntity",
+        "biolink:ChemicalEntityOrGeneOrGeneProduct",
+        "biolink:PhysicalEssence",
+        "biolink:OntologyClass",
+        "biolink:BiologicalEntity",
+        "biolink:ThingWithTaxon",
+        "biolink:NamedThing",
+        "biolink:Entity",
+        "biolink:PhysicalEssenceOrOccurrent",
+        "biolink:MacromolecularMachineMixin",
+        "biolink:Protein",
+        "biolink:GeneProductMixin",
+        "biolink:Polypeptide",
+        "biolink:ChemicalEntityOrProteinOrPolypeptide"
+      ]
+    },
+    "disease_curie": "MONDO:0100096",
+    "query_graph": {
+      "nodes": {
+        "n0": {
+          "ids": [
+            "NCBIGene:611464"
+          ],
+          "categories": [
+            "biolink:Gene"
+          ]
+        },
+        "n1": {
+          "categories": [
+            "biolink:NamedThing"
+          ]
+        },
+        "n2": {
+          "ids": [
+            "MONDO:0100096"
+          ],
+          "categories": [
+            "biolink:Disease"
+          ]
+        }
+      },
+      "edges": {
+        "e0": {
+          "subject": "n0",
+          "object": "n1"
+        },
+        "e1": {
+          "subject": "n1",
+          "object": "n2"
+        }
+      }
+    },
+    "timestamp": "2025-10-02T14:25:12.983733",
+    "status": "placeholder",
+    "message": "TCT implementation pending"
+  },
+  {
+    "gene": {
+      "original": "CD6",
+      "curie": "NCBIGene:113886265",
+      "label": null,
+      "types": [
+        "biolink:Gene",
+        "biolink:GeneOrGeneProduct",
+        "biolink:GenomicEntity",
+        "biolink:ChemicalEntityOrGeneOrGeneProduct",
+        "biolink:PhysicalEssence",
+        "biolink:OntologyClass",
+        "biolink:BiologicalEntity",
+        "biolink:ThingWithTaxon",
+        "biolink:NamedThing",
+        "biolink:Entity",
+        "biolink:PhysicalEssenceOrOccurrent",
+        "biolink:MacromolecularMachineMixin",
+        "biolink:Protein",
+        "biolink:GeneProductMixin",
+        "biolink:Polypeptide",
+        "biolink:ChemicalEntityOrProteinOrPolypeptide"
+      ]
+    },
+    "disease_curie": "MONDO:0100096",
+    "query_graph": {
+      "nodes": {
+        "n0": {
+          "ids": [
+            "NCBIGene:113886265"
+          ],
+          "categories": [
+            "biolink:Gene"
+          ]
+        },
+        "n1": {
+          "categories": [
+            "biolink:NamedThing"
+          ]
+        },
+        "n2": {
+          "ids": [
+            "MONDO:0100096"
+          ],
+          "categories": [
+            "biolink:Disease"
+          ]
+        }
+      },
+      "edges": {
+        "e0": {
+          "subject": "n0",
+          "object": "n1"
+        },
+        "e1": {
+          "subject": "n1",
+          "object": "n2"
+        }
+      }
+    },
+    "timestamp": "2025-10-02T14:25:12.982889",
+    "status": "placeholder",
+    "message": "TCT implementation pending"
+  },
+  {
+    "gene": {
+      "original": "IFITM2",
+      "curie": "NCBIGene:10581",
+      "label": null,
+      "types": [
+        "biolink:Gene",
+        "biolink:GeneOrGeneProduct",
+        "biolink:GenomicEntity",
+        "biolink:ChemicalEntityOrGeneOrGeneProduct",
+        "biolink:PhysicalEssence",
+        "biolink:OntologyClass",
+        "biolink:BiologicalEntity",
+        "biolink:ThingWithTaxon",
+        "biolink:NamedThing",
+        "biolink:Entity",
+        "biolink:PhysicalEssenceOrOccurrent",
+        "biolink:MacromolecularMachineMixin",
+        "biolink:Protein",
+        "biolink:GeneProductMixin",
+        "biolink:Polypeptide",
+        "biolink:ChemicalEntityOrProteinOrPolypeptide"
+      ]
+    },
+    "disease_curie": "MONDO:0100096",
+    "query_graph": {
+      "nodes": {
+        "n0": {
+          "ids": [
+            "NCBIGene:10581"
+          ],
+          "categories": [
+            "biolink:Gene"
+          ]
+        },
+        "n1": {
+          "categories": [
+            "biolink:NamedThing"
+          ]
+        },
+        "n2": {
+          "ids": [
+            "MONDO:0100096"
+          ],
+          "categories": [
+            "biolink:Disease"
+          ]
+        }
+      },
+      "edges": {
+        "e0": {
+          "subject": "n0",
+          "object": "n1"
+        },
+        "e1": {
+          "subject": "n1",
+          "object": "n2"
+        }
+      }
+    },
+    "timestamp": "2025-10-02T14:25:12.983249",
+    "status": "placeholder",
+    "message": "TCT implementation pending"
+  },
+  {
+    "gene": {
+      "original": "IL32",
+      "curie": "NCBIGene:9235",
+      "label": null,
+      "types": [
+        "biolink:Gene",
+        "biolink:GeneOrGeneProduct",
+        "biolink:GenomicEntity",
+        "biolink:ChemicalEntityOrGeneOrGeneProduct",
+        "biolink:PhysicalEssence",
+        "biolink:OntologyClass",
+        "biolink:BiologicalEntity",
+        "biolink:ThingWithTaxon",
+        "biolink:NamedThing",
+        "biolink:Entity",
+        "biolink:PhysicalEssenceOrOccurrent",
+        "biolink:MacromolecularMachineMixin",
+        "biolink:Protein",
+        "biolink:GeneProductMixin",
+        "biolink:Polypeptide",
+        "biolink:ChemicalEntityOrProteinOrPolypeptide"
+      ]
+    },
+    "disease_curie": "MONDO:0100096",
+    "query_graph": {
+      "nodes": {
+        "n0": {
+          "ids": [
+            "NCBIGene:9235"
+          ],
+          "categories": [
+            "biolink:Gene"
+          ]
+        },
+        "n1": {
+          "categories": [
+            "biolink:NamedThing"
+          ]
+        },
+        "n2": {
+          "ids": [
+            "MONDO:0100096"
+          ],
+          "categories": [
+            "biolink:Disease"
+          ]
+        }
+      },
+      "edges": {
+        "e0": {
+          "subject": "n0",
+          "object": "n1"
+        },
+        "e1": {
+          "subject": "n1",
+          "object": "n2"
+        }
+      }
+    },
+    "timestamp": "2025-10-02T14:25:12.984074",
+    "status": "placeholder",
+    "message": "TCT implementation pending"
+  },
+  {
+    "gene": {
+      "original": "IL4R",
+      "curie": "NCBIGene:705404",
+      "label": null,
+      "types": [
+        "biolink:Gene",
+        "biolink:GeneOrGeneProduct",
+        "biolink:GenomicEntity",
+        "biolink:ChemicalEntityOrGeneOrGeneProduct",
+        "biolink:PhysicalEssence",
+        "biolink:OntologyClass",
+        "biolink:BiologicalEntity",
+        "biolink:ThingWithTaxon",
+        "biolink:NamedThing",
+        "biolink:Entity",
+        "biolink:PhysicalEssenceOrOccurrent",
+        "biolink:MacromolecularMachineMixin",
+        "biolink:Protein",
+        "biolink:GeneProductMixin",
+        "biolink:Polypeptide",
+        "biolink:ChemicalEntityOrProteinOrPolypeptide"
+      ]
+    },
+    "disease_curie": "MONDO:0100096",
+    "query_graph": {
+      "nodes": {
+        "n0": {
+          "ids": [
+            "NCBIGene:705404"
+          ],
+          "categories": [
+            "biolink:Gene"
+          ]
+        },
+        "n1": {
+          "categories": [
+            "biolink:NamedThing"
+          ]
+        },
+        "n2": {
+          "ids": [
+            "MONDO:0100096"
+          ],
+          "categories": [
+            "biolink:Disease"
+          ]
+        }
+      },
+      "edges": {
+        "e0": {
+          "subject": "n0",
+          "object": "n1"
+        },
+        "e1": {
+          "subject": "n1",
+          "object": "n2"
+        }
+      }
+    },
+    "timestamp": "2025-10-02T14:25:12.984152",
+    "status": "placeholder",
+    "message": "TCT implementation pending"
+  },
+  {
+    "gene": {
+      "original": "PIK3AP1",
+      "curie": "NCBIGene:100155165",
+      "label": null,
+      "types": [
+        "biolink:Gene",
+        "biolink:GeneOrGeneProduct",
+        "biolink:GenomicEntity",
+        "biolink:ChemicalEntityOrGeneOrGeneProduct",
+        "biolink:PhysicalEssence",
+        "biolink:OntologyClass",
+        "biolink:BiologicalEntity",
+        "biolink:ThingWithTaxon",
+        "biolink:NamedThing",
+        "biolink:Entity",
+        "biolink:PhysicalEssenceOrOccurrent",
+        "biolink:MacromolecularMachineMixin",
+        "biolink:Protein",
+        "biolink:GeneProductMixin",
+        "biolink:Polypeptide",
+        "biolink:ChemicalEntityOrProteinOrPolypeptide"
+      ]
+    },
+    "disease_curie": "MONDO:0100096",
+    "query_graph": {
+      "nodes": {
+        "n0": {
+          "ids": [
+            "NCBIGene:100155165"
+          ],
+          "categories": [
+            "biolink:Gene"
+          ]
+        },
+        "n1": {
+          "categories": [
+            "biolink:NamedThing"
+          ]
+        },
+        "n2": {
+          "ids": [
+            "MONDO:0100096"
+          ],
+          "categories": [
+            "biolink:Disease"
+          ]
+        }
+      },
+      "edges": {
+        "e0": {
+          "subject": "n0",
+          "object": "n1"
+        },
+        "e1": {
+          "subject": "n1",
+          "object": "n2"
+        }
+      }
+    },
+    "timestamp": "2025-10-02T14:25:12.984252",
+    "status": "placeholder",
+    "message": "TCT implementation pending"
+  },
+  {
+    "gene": {
+      "original": "FYN",
+      "curie": "NCBIGene:791125",
+      "label": null,
+      "types": [
+        "biolink:Gene",
+        "biolink:GeneOrGeneProduct",
+        "biolink:GenomicEntity",
+        "biolink:ChemicalEntityOrGeneOrGeneProduct",
+        "biolink:PhysicalEssence",
+        "biolink:OntologyClass",
+        "biolink:BiologicalEntity",
+        "biolink:ThingWithTaxon",
+        "biolink:NamedThing",
+        "biolink:Entity",
+        "biolink:PhysicalEssenceOrOccurrent",
+        "biolink:MacromolecularMachineMixin",
+        "biolink:Protein",
+        "biolink:GeneProductMixin",
+        "biolink:Polypeptide",
+        "biolink:ChemicalEntityOrProteinOrPolypeptide"
+      ]
+    },
+    "disease_curie": "MONDO:0100096",
+    "query_graph": {
+      "nodes": {
+        "n0": {
+          "ids": [
+            "NCBIGene:791125"
+          ],
+          "categories": [
+            "biolink:Gene"
+          ]
+        },
+        "n1": {
+          "categories": [
+            "biolink:NamedThing"
+          ]
+        },
+        "n2": {
+          "ids": [
+            "MONDO:0100096"
+          ],
+          "categories": [
+            "biolink:Disease"
+          ]
+        }
+      },
+      "edges": {
+        "e0": {
+          "subject": "n0",
+          "object": "n1"
+        },
+        "e1": {
+          "subject": "n1",
+          "object": "n2"
+        }
+      }
+    },
+    "timestamp": "2025-10-02T14:25:12.984325",
+    "status": "placeholder",
+    "message": "TCT implementation pending"
+  }
+]
