@@ -110,14 +110,35 @@ class GraphBuilder:
             if subj and obj:  # Skip empty entries
                 # Preserve all edge attributes from TRAPI
                 edge_attrs = edges[i]
+
+                # Extract sources information (full detail)
+                sources = edge_attrs.get('sources', [])
+
+                # Extract attributes array (contains publications, sentences, confidence scores, etc.)
+                attributes = edge_attrs.get('attributes', [])
+
+                # Extract publications from all patterns (top-level + nested)
+                publications = self._extract_publications_robust(attributes)
+
+                # Extract supporting text/sentences from all patterns
+                sentences = self._extract_supporting_text_robust(attributes)
+
+                # Extract confidence scores from all patterns
+                confidence_scores = self._extract_confidence_scores_robust(attributes)
+
                 graph.add_edge(
                     subj,
                     obj,
                     predicate=pred,
-                    knowledge_source=edge_attrs.get('knowledge_source', []),
-                    publications=edge_attrs.get('publications', []),
+                    sources=sources,  # Full source information
+                    attributes=attributes,  # Complete attributes array
+                    publications=publications,  # Extracted publications
+                    sentences=sentences,  # Supporting sentences
+                    confidence_scores=confidence_scores,  # Confidence scores
                     qualifiers=edge_attrs.get('qualifiers', []),
-                    query_result_id=edge_attrs.get('query_result_id'),  # Preserve query result ID for sampling
+                    query_result_id=edge_attrs.get('query_result_id'),
+                    # Keep legacy knowledge_source for backward compatibility
+                    knowledge_source=edge_attrs.get('knowledge_source', []),
                 )
 
         logger.info(f"Created graph: {graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges")
@@ -294,3 +315,139 @@ class GraphBuilder:
                 curie_to_name[curie] = curie
 
         return curie_to_name
+
+    def _extract_publications_robust(self, attributes: List[Dict[str, Any]]) -> List[str]:
+        """Extract publications from all TRAPI patterns (top-level + nested).
+
+        Handles 3 patterns:
+        1. Top-level with original_attribute_name="publications"
+        2. Top-level with attribute_type_id="biolink:publications"
+        3. Nested inside biolink:has_supporting_study_result
+
+        Args:
+            attributes: List of TRAPI attribute dictionaries
+
+        Returns:
+            Deduplicated list of publication IDs
+        """
+        pubs = []
+
+        for attr in attributes:
+            # Pattern 1 & 2: Top-level publications
+            if attr.get('attribute_type_id') == 'biolink:publications':
+                value = attr.get('value', [])
+                # Handle both list and single string values
+                if isinstance(value, list):
+                    pubs.extend(value)
+                elif value:
+                    pubs.append(value)
+
+            # Pattern 3: Nested in has_supporting_study_result
+            if attr.get('attribute_type_id') == 'biolink:has_supporting_study_result':
+                for nested in attr.get('attributes', []):
+                    if nested.get('attribute_type_id') == 'biolink:publications':
+                        value = nested.get('value', [])
+                        if isinstance(value, list):
+                            pubs.extend(value)
+                        elif value:
+                            pubs.append(value)
+
+        # Deduplicate and filter out None/empty strings
+        return list(set(filter(None, pubs)))
+
+    def _extract_supporting_text_robust(self, attributes: List[Dict[str, Any]]) -> List[str]:
+        """Extract supporting text/sentences from all TRAPI patterns.
+
+        Handles 3 patterns:
+        1. Legacy: original_attribute_name="sentences"
+        2. Modern: attribute_type_id="biolink:supporting_text" (top-level)
+        3. Nested: biolink:supporting_text inside has_supporting_study_result
+
+        Args:
+            attributes: List of TRAPI attribute dictionaries
+
+        Returns:
+            List of supporting text strings
+        """
+        texts = []
+
+        for attr in attributes:
+            # Pattern 1: Legacy sentences attribute
+            if attr.get('original_attribute_name') == 'sentences':
+                value = attr.get('value', '')
+                if value:
+                    texts.append(value)
+
+            # Pattern 2: Modern top-level supporting_text
+            if attr.get('attribute_type_id') == 'biolink:supporting_text':
+                value = attr.get('value', '')
+                if value:
+                    texts.append(value)
+
+            # Pattern 3: Nested in has_supporting_study_result
+            if attr.get('attribute_type_id') == 'biolink:has_supporting_study_result':
+                for nested in attr.get('attributes', []):
+                    if nested.get('attribute_type_id') == 'biolink:supporting_text':
+                        value = nested.get('value', '')
+                        if value:
+                            texts.append(value)
+
+        # Filter out empty strings
+        return [t for t in texts if t]
+
+    def _extract_confidence_scores_robust(self, attributes: List[Dict[str, Any]]) -> Dict[str, float]:
+        """Extract confidence scores from all TRAPI patterns.
+
+        Handles multiple patterns:
+        1. Legacy: original_attribute_name="tmkp_confidence_score"
+        2. Modern top-level: attribute_type_id="biolink:extraction_confidence_score"
+        3. STRING: original_attribute_name="Combined_score"
+        4. Nested: extraction_confidence_score inside has_supporting_study_result
+
+        Args:
+            attributes: List of TRAPI attribute dictionaries
+
+        Returns:
+            Dictionary mapping score type to value
+        """
+        scores = {}
+
+        for attr in attributes:
+            orig_name = attr.get('original_attribute_name', '')
+            attr_type = attr.get('attribute_type_id', '')
+            value = attr.get('value')
+
+            # Pattern 1: tmkp_confidence_score (legacy text mining)
+            if orig_name == 'tmkp_confidence_score' and value is not None:
+                try:
+                    scores['tmkp_confidence_score'] = float(value)
+                except (ValueError, TypeError):
+                    pass
+
+            # Pattern 2: extraction_confidence_score (modern)
+            if attr_type == 'biolink:extraction_confidence_score' and value is not None:
+                try:
+                    scores['extraction_confidence_score'] = float(value)
+                except (ValueError, TypeError):
+                    pass
+
+            # Pattern 3: STRING Combined_score
+            if orig_name == 'Combined_score' and value is not None:
+                try:
+                    scores['combined_score'] = float(value)
+                except (ValueError, TypeError):
+                    pass
+
+            # Pattern 4: Nested in has_supporting_study_result
+            if attr_type == 'biolink:has_supporting_study_result':
+                for nested in attr.get('attributes', []):
+                    if nested.get('attribute_type_id') == 'biolink:extraction_confidence_score':
+                        nested_value = nested.get('value')
+                        if nested_value is not None:
+                            try:
+                                # Use different key for nested scores
+                                scores['extraction_confidence_score_nested'] = float(nested_value)
+                            except (ValueError, TypeError):
+                                pass
+
+        return scores

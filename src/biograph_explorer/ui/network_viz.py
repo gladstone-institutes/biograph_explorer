@@ -29,15 +29,14 @@ logger = logging.getLogger(__name__)
 
 # Color scheme for node categories
 CATEGORY_COLORS = {
-    "Gene": "#E74C3C",  # Red
-    "Disease": "#9B59B6",  # Purple
-    "Protein": "#4ECDC4",  # Cyan
-    "ChemicalEntity": "#F39C12",  # Yellow/Orange
-    "BiologicalProcess": "#2ECC71",  # Green
-    "Cluster": "#16A085",  # Teal (for cluster meta-nodes)
-    "Other": "#3498DB",  # Blue
+    "Gene": "#1C91D4",
+    "Disease": "#B14380", 
+    "Protein": "#00F6B3",
+    "ChemicalEntity": "#D55E00",
+    "BiologicalProcess": "#D5C711",
+    "Cluster": "#005F45",
+    "Other": "#666666",
 }
-
 # Get the absolute path to the assets directory
 _ASSETS_DIR = Path(__file__).parent.parent / "assets"
 
@@ -71,6 +70,101 @@ CATEGORY_ICONS = {
     "Cluster": None,
     "Other": None,
 }
+
+
+def _format_attribute_value_safe(attr: Dict[str, Any]) -> Optional[str]:
+    """Safely format any attribute value for display.
+
+    Args:
+        attr: Attribute dictionary with 'value' key
+
+    Returns:
+        Formatted string or None if value cannot be displayed
+    """
+    value = attr.get('value')
+
+    if value is None:
+        return None
+
+    # Handle primitive types
+    if isinstance(value, (str, int, bool)):
+        return str(value)
+
+    if isinstance(value, float):
+        return f"{value:.4f}"
+
+    # Handle lists
+    if isinstance(value, list):
+        # List of primitives - join them
+        if all(isinstance(v, (str, int, float, bool)) for v in value):
+            return ", ".join(str(v) for v in value)
+        # List of objects - just show count
+        return f"{len(value)} items"
+
+    # Handle dicts - skip them (too complex)
+    if isinstance(value, dict):
+        return None
+
+    return None
+
+
+def _flatten_attributes_for_display(attributes: List[Dict[str, Any]]) -> List[str]:
+    """Extract displayable attributes, skipping containers and already-extracted fields.
+
+    Recursively processes nested attribute structures (up to 1 level) and filters
+    out attributes that are containers or have already been extracted to dedicated fields.
+
+    Args:
+        attributes: List of TRAPI attribute dictionaries
+
+    Returns:
+        List of formatted attribute strings (e.g., "knowledge_level: not_provided")
+    """
+    # Attribute types to skip (containers or already extracted)
+    SKIP_TYPES = {
+        'biolink:publications',
+        'biolink:supporting_text',
+        'biolink:extraction_confidence_score',
+        'biolink:has_supporting_study_result',  # Container
+        'biolink:supporting_study',  # Container
+        'biolink:primary_knowledge_source',  # Redundant with sources
+        'EDAM:data_0951',  # Statistical data container
+    }
+
+    # Attribute names to skip (legacy format)
+    SKIP_NAMES = {'publications', 'sentences', 'tmkp_confidence_score', 'tmkp_ids'}
+
+    display_attrs = []
+
+    def process_attrs(attrs: List[Dict[str, Any]], depth: int = 0):
+        """Recursively process attributes up to max depth of 1."""
+        if depth > 1:  # Max nesting depth in data is 1
+            return
+
+        for attr in attrs:
+            attr_type = attr.get('attribute_type_id', '')
+            attr_name = attr.get('original_attribute_name', '')
+
+            # Skip containers and already-extracted fields
+            if attr_type in SKIP_TYPES or attr_name in SKIP_NAMES:
+                # But recurse into containers to extract nested displayable attributes
+                if 'attributes' in attr and attr.get('attributes'):
+                    process_attrs(attr.get('attributes', []), depth + 1)
+                continue
+
+            # Format this attribute for display
+            formatted = _format_attribute_value_safe(attr)
+            if formatted:
+                # Use original_attribute_name if available, else use attribute_type_id
+                label = attr_name if attr_name else attr_type.replace('biolink:', '')
+                display_attrs.append(f"{label}: {formatted}")
+
+            # Recurse if nested (shouldn't happen for non-containers, but be safe)
+            if 'attributes' in attr and attr.get('attributes'):
+                process_attrs(attr.get('attributes', []), depth + 1)
+
+    process_attrs(attributes)
+    return display_attrs
 
 
 def prepare_cytoscape_elements(
@@ -158,13 +252,168 @@ def prepare_cytoscape_elements(
         if graph.has_edge(source, target):
             edge_attrs = graph[source][target]
 
-            # Add predicate (cleaned)
+            # Add predicate (cleaned) - always show
             predicate = edge_attrs.get("predicate", "")
             edge_element["data"]["label"] = predicate.replace("biolink:", "")
+            if predicate:
+                edge_element["data"]["predicate"] = predicate
 
-            # Add knowledge sources
-            sources = edge_attrs.get("knowledge_source", [])
-            edge_element["data"]["knowledge_sources"] = sources
+            # Add full sources information (formatted as readable strings)
+            sources = edge_attrs.get("sources", [])
+            if sources:
+                # Format sources as readable text
+                sources_text = []
+                for src in sources:
+                    resource_id = src.get("resource_id", "").replace("infores:", "")
+                    resource_role = src.get("resource_role", "")
+                    upstream = src.get("upstream_resource_ids", [])
+                    if upstream:
+                        upstream_text = ", ".join([u.replace("infores:", "") for u in upstream])
+                        sources_text.append(f"{resource_id} ({resource_role}, upstream: {upstream_text})")
+                    else:
+                        sources_text.append(f"{resource_id} ({resource_role})")
+                edge_element["data"]["sources"] = "; ".join(sources_text)
+
+            # Add publications (formatted with clickable links)
+            publications = edge_attrs.get("publications", [])
+            if publications:
+                # Separate PMIDs/PMCIDs from image URLs and already-formatted links
+                pmid_links = []
+                image_links = []
+                for pub in publications:
+                    if pub.startswith("https://") or pub.startswith("http://"):
+                        # Already a full URL - check if it's an image or keep as-is
+                        if any(ext in pub.lower() for ext in ['.jpg', '.png', '.gif', '.svg']):
+                            image_links.append(f'<a href="{pub}" target="_blank">Figure</a>')
+                        else:
+                            # It's already a link, just make it clickable
+                            pmid_links.append(f'<a href="{pub}" target="_blank">{pub}</a>')
+                    else:
+                        # Convert PMID/PMCID to clickable PubMed/PMC link
+                        if pub.startswith("PMID:"):
+                            pmid = pub.replace("PMID:", "")
+                            pmid_links.append(f'<a href="https://pubmed.ncbi.nlm.nih.gov/{pmid}" target="_blank">{pub}</a>')
+                        elif pub.startswith("PMC:") or pub.startswith("PMCID:"):
+                            # Extract the PMC ID, handling cases like:
+                            # PMC:8721920 -> PMC8721920
+                            # PMCID:8721920 -> PMC8721920
+                            # PMCID:PMC8721920 -> PMC8721920 (already has PMC)
+                            # PMC:PMC8721920 -> PMC8721920 (already has PMC)
+
+                            # Remove prefix
+                            if pub.startswith("PMCID:"):
+                                pmcid = pub[6:]  # Remove "PMCID:"
+                            else:  # PMC:
+                                pmcid = pub[4:]  # Remove "PMC:"
+
+                            # Ensure it starts with PMC (add if missing)
+                            if not pmcid.startswith("PMC"):
+                                pmcid = "PMC" + pmcid
+
+                            pmid_links.append(f'<a href="https://www.ncbi.nlm.nih.gov/pmc/articles/{pmcid}" target="_blank">{pub}</a>')
+                        else:
+                            pmid_links.append(pub)  # Keep as-is if format unknown
+
+                # Format for display
+                pub_parts = []
+                if pmid_links:
+                    pub_parts.append("Publications: " + ", ".join(pmid_links))
+                if image_links:
+                    pub_parts.append(f"Figures: {', '.join(image_links)}")
+
+                edge_element["data"]["publications"] = " | ".join(pub_parts) if pub_parts else ""
+
+            # Add supporting sentences (formatted as joined text)
+            sentences = edge_attrs.get("sentences", [])
+            if sentences:
+                # Ensure all items are strings and join with line breaks
+                sentence_strs = []
+                for s in sentences:
+                    if isinstance(s, str) and s:
+                        sentence_strs.append(s)
+                    elif isinstance(s, list):
+                        # Handle lists of sentences
+                        sentence_strs.extend([str(item) for item in s if item])
+                    elif s:
+                        sentence_strs.append(str(s))
+
+                if sentence_strs:
+                    edge_element["data"]["sentences"] = " | ".join(sentence_strs)
+
+            # Add confidence scores (formatted as key: value pairs)
+            confidence_scores = edge_attrs.get("confidence_scores", {})
+            if confidence_scores and isinstance(confidence_scores, dict):
+                scores_text = []
+                for key, value in confidence_scores.items():
+                    # Format the key to be more readable
+                    readable_key = key.replace("tmkp_", "").replace("_", " ").title()
+                    if isinstance(value, float):
+                        scores_text.append(f"{readable_key}: {value:.4f}")
+                    else:
+                        scores_text.append(f"{readable_key}: {value}")
+
+                if scores_text:
+                    edge_element["data"]["confidence_scores"] = ", ".join(scores_text)
+                else:
+                    # Empty dict - don't show the field at all
+                    if "confidence_scores" in edge_element["data"]:
+                        del edge_element["data"]["confidence_scores"]
+            else:
+                # Not a dict or empty - remove if exists
+                if "confidence_scores" in edge_element["data"]:
+                    del edge_element["data"]["confidence_scores"]
+
+            # Add qualifiers (formatted as readable text)
+            qualifiers = edge_attrs.get("qualifiers", [])
+            if qualifiers:
+                qualifiers_text = []
+                for q in qualifiers:
+                    q_type = q.get("qualifier_type_id", "").replace("biolink:", "")
+                    q_value = q.get("qualifier_value", "").replace("biolink:", "")
+                    qualifiers_text.append(f"{q_type}: {q_value}")
+
+                if qualifiers_text:
+                    edge_element["data"]["qualifiers"] = "; ".join(qualifiers_text)
+                else:
+                    # Empty qualifiers - remove the field
+                    if "qualifiers" in edge_element["data"]:
+                        del edge_element["data"]["qualifiers"]
+            else:
+                # No qualifiers - remove if exists
+                if "qualifiers" in edge_element["data"]:
+                    del edge_element["data"]["qualifiers"]
+
+            # Format qualifiers as readable text for display (only if qualifiers exist)
+            if qualifiers:
+                qualified_predicate = ""
+                object_direction = ""
+                object_aspect = ""
+                for qualifier in qualifiers:
+                    q_type = qualifier.get("qualifier_type_id", "")
+                    q_value = qualifier.get("qualifier_value", "")
+                    if q_type == "biolink:qualified_predicate":
+                        qualified_predicate = q_value.replace("biolink:", "")
+                    elif q_type == "biolink:object_direction_qualifier":
+                        object_direction = q_value
+                    elif q_type == "biolink:object_aspect_qualifier":
+                        object_aspect = q_value
+
+                # Create human-readable qualifier text only if complete
+                if qualified_predicate and object_direction and object_aspect:
+                    edge_element["data"]["qualified_relationship"] = f"{qualified_predicate} {object_direction} {object_aspect}"
+
+            # Add complete attributes array (formatted as readable text)
+            attributes = edge_attrs.get("attributes", [])
+            if attributes:
+                # Format attributes using helper function
+                attributes_text = _flatten_attributes_for_display(attributes)
+                if attributes_text:  # Only add if non-empty
+                    edge_element["data"]["attributes"] = "; ".join(attributes_text)
+
+            # Add query_result_id only if present
+            query_result_id = edge_attrs.get("query_result_id")
+            if query_result_id is not None:
+                edge_element["data"]["query_result_id"] = query_result_id
 
     return {"nodes": elements["nodes"], "edges": elements["edges"]}
 
