@@ -1,20 +1,30 @@
 # BioGraph Explorer 🧬
 
-Streamlit application for multi-gene TRAPI query integration with NetworkX clustering and LLM-assisted exploration using Cytoscape.js visualization.
+**Status**: Phase 2 Complete ✅ | Phase 3 In Progress 📋
+
+Streamlit application for exploring biomedical knowledge graphs through multi-gene TRAPI queries, network clustering, and interactive visualization.
 
 ## Overview
 
-BioGraph Explorer queries the NCATS Translator knowledge graph system to find connections between genes and diseases, then uses network analysis to identify convergent pathways and therapeutic targets.
+BioGraph Explorer queries the NCATS Translator knowledge graph system to find connections between genes and diseases, then identifies convergent pathways and potential therapeutic targets using network analysis.
 
-**Features:**
-- 🔍 Gene normalization using TCT library
-- 🌐 Parallel TRAPI queries across 15+ Translator APIs
-- 📊 NetworkX graph construction with rich node attributes
-- 🎯 Louvain community detection
-- 📈 Centrality analysis (PageRank, betweenness, degree)
-- 🎨 Interactive Cytoscape.js visualization with multiple layout algorithms
-- 💾 CSV import/export for gene lists
-- 🔬 Material Icons for biological entity types
+**Current Features (Phase 1 and 2):**
+- ✅ Gene normalization using NCATS Translator
+- ✅ Parallel TRAPI queries across 15+ Translator APIs
+- ✅ NetworkX graph construction
+- ✅ Louvain community detection & centrality analysis
+- ✅ Interactive Cytoscape.js visualization with 9 layout algorithms
+- ✅ CSV import and example datasets (Alzheimer's, COVID-19)
+- ✅ Query caching for performance
+
+**Planned Features (Phase 3):**
+- 📋 Improved query builder (3-hop queries, gene -> [intermediate] -> disease associated phenotypes)
+- 📋 Better clustering algorithms suited for each query type
+- 📋 LLM cluster summarization
+- 📋 RAG-powered chat interface with Claude AI with knowledge provenance subgraph display
+- 📋 Session management (save/load analysis sessions)
+
+> **Note**: This is research software in active development. Some features are incomplete and subject to change.
 
 ## Installation
 
@@ -26,64 +36,52 @@ BioGraph Explorer queries the NCATS Translator knowledge graph system to find co
 
 ```bash
 # Clone repository
-git clone <repository-url>
+git clone https://github.com/gladstone-institutes/biograph_explorer.git
 cd biograph_explorer
 
 # Install with Poetry
 poetry install
 
-# Activate environment
-poetry shell
 ```
 
 ## Quick Start
 
-### 1. Run the Streamlit App
+### 1. Run the App
 
 ```bash
 streamlit run app.py
 ```
 
-The app will open in your browser at `http://localhost:8501`
 
-### 2. Use Example Datasets
+### 2. Try an Example Query
 
-**Option A: Via UI**
-1. In the sidebar, select "Example Dataset"
-2. Choose either:
-   - **Alzheimer's Disease (15 genes)**: APOE, APP, PSEN1, PSEN2, MAPT, TREM2, etc.
-   - **COVID-19 (10 genes)**: CD6, IFITM3, IFITM2, STAT5A, KLRG1, DPP4, etc.
-3. Click **Run Query**
+1. In the sidebar, select **"Example Dataset"**
+2. Choose **"Alzheimer's Disease (15 genes)"**
+3. Select query pattern: **"1-hop: Gene → Any Connection"** (recommended for first run)
+4. Click **"Run Query"** (takes ~3-5 minutes)
 
-**Option B: Load from CSV**
-```bash
-# Example files included
-data/test_genes/alzheimers_genes.csv
-data/test_genes/covid19_genes.csv
-```
+### 3. Explore Results
 
-### 3. Upload Your Own Data
+The app displays results in three tabs:
 
-Create a CSV file with a `gene_symbol` column:
+- **Overview**: Graph statistics, node categories, top convergent nodes
+- **Network**: Interactive Cytoscape.js visualization (drag to pan, scroll to zoom)
+- **Communities**: Detected biological modules with hub nodes
 
-```csv
-gene_symbol,description
-APOE,Lipid transport
-APP,Amyloid precursor
-PSEN1,γ-secretase component
-```
+### 4. Try Your Own Genes
 
-Then upload via the sidebar.
+Create a CSV with a `gene_symbol` column (see [data/test_genes/alzheimers_genes.csv](data/test_genes/alzheimers_genes.csv) for format) or enter genes manually in the sidebar.
 
-## Workflow
+## Understanding Your Results
 
-1. **Input** → Gene symbols (manual, CSV, or example)
-2. **Normalize** → TCT converts symbols to CURIEs (e.g., APOE → NCBIGene:348)
-3. **Query** → Parallel TRAPI queries to 15 Translator APIs
-4. **Build** → NetworkX graph with 400-800 nodes, 700+ edges
-5. **Analyze** → Louvain communities, PageRank, convergence metrics
-6. **Visualize** → Interactive results dashboard
+**Query Patterns:**
+- **1-hop** (`Gene → Any`): Finds all connections to your genes (broad discovery)
+- **2-hop** (`Gene → Intermediate → Disease`): Finds therapeutic targets between genes and a disease (requires disease CURIE like `MONDO:0004975`)
 
+**Key Metrics:**
+- **Gene Frequency**: How many query genes connect to each node (convergence indicator)
+- **PageRank**: Relative importance in the network
+- **Communities**: Biological modules detected by Louvain clustering
 
 
 
@@ -118,62 +116,37 @@ poetry add <package-name>
 - **[st-link-analysis](https://github.com/AlrasheedA/st-link-analysis)**: Interactive Cytoscape.js visualization
 - **[Pydantic](https://docs.pydantic.dev/)**: Data validation
 
-## API Notes
+## Current Limitations
 
-### TRAPI Query Behavior
-
-- **Normal API success rate**: 40-60% (6-10 out of 15 APIs)
-- **Failed APIs**: `NoneType is not iterable` = no data for this query (expected)
-- **Timeout handling**: Automatic fallback if Plover APIs unreachable
-- **Caching**: All responses cached to `data/cache/` for reuse
-
-### Gene Normalization
-
-- Uses TCT's `name_resolver.batch_lookup()`
-- Accepts HUGO symbols (APOE, APP, etc.)
-- Returns NCBIGene CURIEs
-- Success rate: 90-100% for valid human genes
+- **Knowledge provenance incomplete**: Edge sources/publications not fully displayed (in progress)
+- **API success rate**: Expect 40-60% of TRAPI APIs to succeed (6-10 out of 15) - this is normal
+- **Large graphs**: Networks >200 nodes are auto-sampled for visualization performance
+- **Session persistence**: Manual query re-run required (auto-save coming in Phase 3)
 
 ## Troubleshooting
 
-### TCT Not Available
-```bash
-poetry add tct
-```
+**"Query returned no results"**
+- Normal for some API combinations - at least 5-6 APIs should succeed
+- Check gene normalization succeeded (view progress messages)
+- Try different genes (some have sparse data in Translator)
 
-### python-louvain Not Found
-```bash
-poetry add python-louvain
-```
+**"Graph is empty"**
+- Verify disease CURIE format for 2-hop queries (`MONDO:0004975` for Alzheimer's)
+- Check that genes are valid HUGO symbols (uppercase)
 
-### TRAPI Queries Timing Out
-- **Normal behavior**: Some APIs timeout (expected)
-- **Check**: At least 5-6 APIs should succeed
-- **Fallback**: Uses cached responses if available
-
-### Empty Graph
-- Check gene normalization succeeded
-- Verify disease CURIE format (MONDO:, DOID:, etc.)
-- Try different gene set (some genes have sparse data)
+**"Visualization is slow"**
+- Use simpler layout algorithms (dagre, breadthfirst vs. fcose)
+- Reduce `max_intermediates` slider to sample fewer nodes
+- View individual communities instead of full graph
 
 
-## Contributing
+## License & Citation
 
-Interested in contributing? Check out the [contributing guidelines](CONTRIBUTING.md). Please note that this project is released with a [Code of Conduct](CONDUCT.md). By contributing to this project, you agree to abide by its terms.
+MIT License - Created by Natalie Gill
 
-## License
+If you use BioGraph Explorer in your research:
 
-`biograph_explorer` was created by Natalie Gill. It is licensed under the terms of the MIT license.
-
-## Credits
-
-`biograph_explorer` was created with [`cookiecutter`](https://cookiecutter.readthedocs.io/en/latest/) and the `py-pkgs-cookiecutter` [template](https://github.com/py-pkgs/py-pkgs-cookiecutter).
-
-## Citation
-
-If you use BioGraph Explorer in your research, please cite:
-
-```
+```bibtex
 @software{biograph_explorer,
   author = {Gill, Natalie},
   title = {BioGraph Explorer: Multi-gene TRAPI Query Integration with Network Analysis},
