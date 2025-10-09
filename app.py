@@ -17,32 +17,18 @@ from biograph_explorer.utils import validate_gene_list, validate_disease_curie, 
 # Page config
 st.set_page_config(
     page_title="BioGraph Explorer",
-    page_icon="🧬",
+    page_icon=":material/biotech:",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
-st.markdown("""
-<style>
-    .stMetric {
-        background-color: #262730;
-        padding: 10px;
-        border-radius: 5px;
-    }
-    .stMetric [data-testid="stMetricValue"] {
-        color: #ffffff;
-        font-weight: bold;
-    }
-    .stMetric [data-testid="stMetricLabel"] {
-        color: #fafafa;
-    }
-</style>
-""", unsafe_allow_html=True)
+# No custom CSS needed - using Material Design theme from .streamlit/config.toml
 
 # Initialize session state
 if 'graph' not in st.session_state:
     st.session_state.graph = None
+if 'knowledge_graph' not in st.session_state:
+    st.session_state.knowledge_graph = None  # Store KnowledgeGraph object
 if 'clustering_results' not in st.session_state:
     st.session_state.clustering_results = None
 if 'query_genes' not in st.session_state:
@@ -55,11 +41,11 @@ if 'disease_curie' not in st.session_state:
     st.session_state.disease_curie = None
 
 # Title
-st.title("🧬 BioGraph Explorer")
+st.title(":material/biotech: BioGraph Explorer")
 st.markdown("Multi-gene TRAPI query integration with NetworkX clustering and visualization")
 
 # Sidebar: Input Configuration
-st.sidebar.header("📥 Input Configuration")
+st.sidebar.header(":material/input: Input Configuration")
 
 # Input method selection
 input_method = st.sidebar.radio(
@@ -87,7 +73,7 @@ if input_method == "Example Dataset":
     try:
         df = pd.read_csv(csv_path)
         genes = df['gene_symbol'].tolist()
-        st.sidebar.success(f"✓ Loaded {len(genes)} genes from example dataset")
+        st.sidebar.success(f":material/check_circle: Loaded {len(genes)} genes from example dataset")
         with st.sidebar.expander("View genes"):
             st.dataframe(df, width='stretch')
     except Exception as e:
@@ -105,7 +91,7 @@ elif input_method == "Upload CSV":
             df = pd.read_csv(uploaded_file)
             if 'gene_symbol' in df.columns:
                 genes = df['gene_symbol'].tolist()
-                st.sidebar.success(f"✓ Loaded {len(genes)} genes from CSV")
+                st.sidebar.success(f":material/check_circle: Loaded {len(genes)} genes from CSV")
                 with st.sidebar.expander("View genes"):
                     st.dataframe(df, width='stretch')
             else:
@@ -124,7 +110,7 @@ elif input_method == "Manual Entry":
     if gene_text:
         # Parse input
         genes = [g.strip().upper() for g in gene_text.replace(',', '\n').split('\n') if g.strip()]
-        st.sidebar.info(f"📝 {len(genes)} genes entered")
+        st.sidebar.info(f":material/edit_note: {len(genes)} genes entered")
 
 else:  # Load Cached Query
     # List available cached files using TRAPIClient
@@ -140,14 +126,14 @@ else:  # Load Cached Query
             help="Load a previously cached TRAPI query result"
         )
 
-        if st.sidebar.button("📂 Load Cache", type="primary"):
+        if st.sidebar.button(":material/folder_open: Load Cache", type="primary"):
             selected_file = cached_files[selected_cache]["path"]
 
             try:
                 cached_response = client._load_cached_response(selected_file)
 
                 if cached_response:
-                    st.sidebar.success(f"✓ Loaded {len(cached_response.edges)} edges from cache")
+                    st.sidebar.success(f":material/check_circle: Loaded {len(cached_response.edges)} edges from cache")
 
                     # Build graph from cached response
                     progress_bar = st.progress(0)
@@ -183,13 +169,14 @@ else:  # Load Cached Query
 
                     # Save to session state
                     st.session_state.graph = kg.graph
+                    st.session_state.knowledge_graph = kg  # Store KnowledgeGraph object
                     st.session_state.clustering_results = results
                     st.session_state.query_genes = cached_response.input_genes
                     st.session_state.response = cached_response
                     st.session_state.disease_curie = cached_response.target_disease
 
                     progress_bar.progress(100)
-                    status_text.text("✓ Cache loaded successfully!")
+                    status_text.text(":material/check_circle: Cache loaded successfully!")
 
                     st.rerun()
 
@@ -212,7 +199,7 @@ disease_curie = st.sidebar.text_input(
 
 # Intermediate entity type selector
 st.sidebar.markdown("---")
-st.sidebar.subheader("🎯 Query Configuration")
+st.sidebar.subheader(":material/tune: Query Configuration")
 
 # Query pattern selector
 query_pattern = st.sidebar.radio(
@@ -244,7 +231,7 @@ if query_pattern == "2-hop (Gene → Intermediate → Disease)":
     )
 
     if not disease_curie:
-        st.sidebar.warning("⚠️ Disease CURIE required for 2-hop queries")
+        st.sidebar.warning(":material/warning: Disease CURIE required for 2-hop queries")
 else:
     st.sidebar.markdown("**Path:** Gene → **[Any Connection]**")
     intermediate_types = []  # Empty for 1-hop
@@ -253,7 +240,7 @@ st.sidebar.markdown("---")
 
 # Query button
 run_query = st.sidebar.button(
-    "🚀 Run Query",
+    ":material/rocket_launch: Run Query",
     type="primary",
     disabled=len(genes) == 0
 )
@@ -264,11 +251,11 @@ if len(genes) > 0:
 # Main area
 if not run_query and not st.session_state.graph:
     # Welcome screen
-    st.info("👈 Configure your query in the sidebar and click **Run Query** to start")
-    
+    st.info(":material/arrow_back: Configure your query in the sidebar and click **Run Query** to start")
+
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("🎯 What it does")
+        st.subheader(":material/info: What it does")
         st.markdown("""
         - **Normalize genes** using TCT name resolver
         - **Query TRAPI** APIs for knowledge graph edges
@@ -276,9 +263,9 @@ if not run_query and not st.session_state.graph:
         - **Detect communities** using Louvain algorithm
         - **Visualize** with interactive Cytoscape.js graphs
         """)
-    
+
     with col2:
-        st.subheader("📊 Example Datasets")
+        st.subheader(":material/dataset: Example Datasets")
         st.markdown("""
         **Alzheimer's Disease** (15 genes)
         - APOE, APP, PSEN1, PSEN2, MAPT, TREM2, CLU, CR1, BIN1, PICALM, CD33, MS4A6A, ABCA7, SORL1, BACE1
@@ -348,10 +335,10 @@ if run_query:
         if query_pattern_used == "2-hop":
             intermediate_cats = response.metadata.get("intermediate_categories", [])
             intermediate_str = ", ".join([c.replace("biolink:", "") for c in intermediate_cats])
-            st.success(f"✓ 2-hop query: Found {len(response.edges)} edges from {response.apis_succeeded}/{response.apis_queried} APIs")
-            st.info(f"🎯 Query: Gene → [{intermediate_str}] → {disease_curie}")
+            st.success(f":material/check_circle: 2-hop query: Found {len(response.edges)} edges from {response.apis_succeeded}/{response.apis_queried} APIs")
+            st.info(f":material/timeline: Query: Gene → [{intermediate_str}] → {disease_curie}")
         else:
-            st.success(f"✓ 1-hop query: Found {len(response.edges)} edges from {response.apis_succeeded}/{response.apis_queried} APIs")
+            st.success(f":material/check_circle: 1-hop query: Found {len(response.edges)} edges from {response.apis_succeeded}/{response.apis_queried} APIs")
         
         # Step 3: Build graph
         status_text.text("Building knowledge graph...")
@@ -374,16 +361,17 @@ if run_query:
         results = engine.analyze_graph(kg.graph, response.input_genes)
         
         progress_bar.progress(90)
-        
+
         # Save to session state
         st.session_state.graph = kg.graph
+        st.session_state.knowledge_graph = kg  # Store KnowledgeGraph object
         st.session_state.clustering_results = results
         st.session_state.query_genes = response.input_genes
         st.session_state.response = response
         st.session_state.disease_curie = disease_curie  # Store for visualization sampling
         
         progress_bar.progress(100)
-        status_text.text("✓ Analysis complete!")
+        status_text.text(":material/check_circle: Analysis complete!")
         
     except ValidationError as e:
         st.error(f"Validation error: {e}")
@@ -397,26 +385,26 @@ if st.session_state.graph:
     st.divider()
     
     # Tabs for different views
-    tab1, tab2, tab3 = st.tabs(["📊 Overview", "🕸️ Network", "🔍 Communities"])
+    tab1, tab2, tab3 = st.tabs([":material/analytics: Overview", ":material/hub: Network", ":material/group_work: Communities"])
     
     with tab1:
         st.header("Analysis Overview")
         
         # Key metrics
         col1, col2, col3, col4 = st.columns(4)
-        
+
         with col1:
-            st.metric("Nodes", st.session_state.graph.number_of_nodes())
-        
+            st.metric("Nodes", st.session_state.graph.number_of_nodes(), border=True)
+
         with col2:
-            st.metric("Edges", st.session_state.graph.number_of_edges())
-        
+            st.metric("Edges", st.session_state.graph.number_of_edges(), border=True)
+
         with col3:
-            st.metric("Communities", st.session_state.clustering_results.num_communities)
-        
+            st.metric("Communities", st.session_state.clustering_results.num_communities, border=True)
+
         with col4:
             import networkx as nx
-            st.metric("Density", f"{nx.density(st.session_state.graph):.4f}")
+            st.metric("Density", f"{nx.density(st.session_state.graph):.4f}", border=True)
         
         # Graph statistics
         st.subheader("Graph Statistics")
@@ -426,21 +414,23 @@ if st.session_state.graph:
             st.json(st.session_state.clustering_results.graph_stats)
         
         with stats_col2:
-            st.metric("Modularity", f"{st.session_state.clustering_results.modularity:.3f}")
+            st.metric("Modularity", f"{st.session_state.clustering_results.modularity:.3f}", border=True)
             st.caption("Higher modularity indicates better community structure")
         
         # Node categories
         st.subheader("Node Categories")
-        category_df = pd.DataFrame([
-            {"Category": cat, "Count": count}
-            for cat, count in sorted(
-                st.session_state.response.metadata.get("node_categories", {}).items(),
-                key=lambda x: x[1],
-                reverse=True
-            )
-        ])
-        if not category_df.empty:
+        if st.session_state.knowledge_graph and st.session_state.knowledge_graph.node_categories:
+            category_df = pd.DataFrame([
+                {"Category": cat, "Count": count}
+                for cat, count in sorted(
+                    st.session_state.knowledge_graph.node_categories.items(),
+                    key=lambda x: x[1],
+                    reverse=True
+                )
+            ])
             st.dataframe(category_df, width='stretch')
+        else:
+            st.info("No node category data available")
     
     with tab2:
         st.header("Knowledge Graph Visualization")
@@ -535,7 +525,7 @@ if st.session_state.graph:
                 cluster_nodes = selected_community.nodes
                 display_graph = st.session_state.graph.subgraph(cluster_nodes).copy()
 
-                st.info(f"ℹ️ Showing Cluster {cluster_id}: {display_graph.number_of_nodes()} nodes, {display_graph.number_of_edges()} edges")
+                st.info(f":material/info: Showing Cluster {cluster_id}: {display_graph.number_of_nodes()} nodes, {display_graph.number_of_edges()} edges")
             else:
                 display_graph = st.session_state.graph
         else:
@@ -562,7 +552,7 @@ if st.session_state.graph:
             )
 
             st.caption("""
-            **💡 How to explore:**
+            **:material/lightbulb: How to explore:**
             - **Drag** to pan • **Scroll** to zoom • **Click** node to select
             - **Fullscreen** button in top-right • **Export JSON** for external tools
             """)

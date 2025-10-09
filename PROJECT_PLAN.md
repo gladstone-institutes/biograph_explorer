@@ -342,11 +342,7 @@ biograph_explorer/
    - [ ] API documentation (ReadTheDocs)
    - [ ] Video tutorials
 
-3. **Deployment**
-   - [ ] Streamlit Cloud deployment
-   - [ ] ReadTheDocs documentation
-   - [ ] PyPI package release
-   - [ ] Docker container
+
 
 ---
 
