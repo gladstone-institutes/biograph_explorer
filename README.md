@@ -84,52 +84,8 @@ Then upload via the sidebar.
 5. **Analyze** → Louvain communities, PageRank, convergence metrics
 6. **Visualize** → Interactive results dashboard
 
-## Expected Results
 
-### Alzheimer's Test Case (15 genes)
-- **Edges**: ~1,500 from 6-10 successful APIs
-- **Nodes**: ~500
-- **Communities**: 3-4 (amyloid processing, lipid metabolism, neuroinflammation)
-- **Convergent nodes**: BACE1, APOE, amyloid-β
-- **Top targets**: BACE1, APOE, TREM2
 
-### COVID-19 Test Case (10 genes)
-- **Edges**: ~800
-- **Nodes**: ~400
-- **Communities**: 2-3
-- **API success rate**: 40-60% (normal)
-
-## Project Structure
-
-```
-biograph_explorer/
-├── app.py                       # Main Streamlit application
-├── data/
-│   ├── test_genes/
-│   │   ├── alzheimers_genes.csv   # Alzheimer's test dataset
-│   │   └── covid19_genes.csv      # COVID-19 test dataset
-│   ├── cache/                     # TRAPI response cache
-│   └── sessions/                  # Saved analysis sessions
-├── src/biograph_explorer/
-│   ├── core/
-│   │   ├── trapi_client.py        # TRAPI query client (TCT integration)
-│   │   ├── graph_builder.py       # NetworkX graph construction
-│   │   ├── clustering_engine.py   # Louvain + centrality analysis
-│   │   └── rag_system.py          # LLM integration (Phase 3)
-│   ├── utils/
-│   │   ├── validators.py          # Input validation
-│   │   ├── formatters.py          # Data formatting
-│   │   └── persistence.py         # Graph serialization
-│   └── ui/
-│       ├── input_panel.py         # Gene/disease input (Streamlit)
-│       ├── query_status.py        # Progress tracking
-│       ├── results_overview.py    # Dashboard
-│       ├── network_viz.py         # Cytoscape.js visualization
-│       └── convergence_view.py    # Convergent nodes table
-└── tests/
-    └── fixtures/
-        └── alzheimers_test_case.json  # Test case specification
-```
 
 ## Development
 
@@ -200,35 +156,6 @@ poetry add python-louvain
 - Verify disease CURIE format (MONDO:, DOID:, etc.)
 - Try different gene set (some genes have sparse data)
 
-## Performance
-
-| Operation | Target | Notes |
-|-----------|--------|-------|
-| Gene normalization | <5s | 15 genes |
-| TRAPI batch query | <2min | With caching/parallelization |
-| Graph construction | <10s | 500 nodes |
-| Community detection | <5s | Louvain algorithm |
-| Centrality metrics | <10s | PageRank + betweenness |
-
-## Phase 2 Status ✅
-
-**Implemented:**
-- ✅ TRAPI client with parallel queries
-- ✅ NetworkX graph builder
-- ✅ Louvain community detection
-- ✅ Centrality metrics (PageRank, betweenness, degree)
-- ✅ Streamlit UI with CSV import
-- ✅ Example datasets (Alzheimer's, COVID-19)
-- ✅ Progress tracking
-- ✅ Session state management
-
-**Phase 3 (In Progress):**
-- ✅ Cytoscape.js network visualization with st-link-analysis
-- ✅ Multiple layout algorithms (cose, fcose, circle, grid, etc.)
-- ✅ Material Icons for entity types
-- 🔲 Claude RAG system integration
-- 🔲 Citation validation with subgraph extraction
-- 🔲 Interactive chat interface
 
 ## Contributing
 
