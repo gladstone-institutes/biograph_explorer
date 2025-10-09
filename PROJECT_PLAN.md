@@ -1,14 +1,14 @@
 # BioGraph Explorer: Project Plan
 
-**Goal**: Streamlit application for multi-gene TRAPI query integration with NetworkX clustering and LLM-assisted exploration using PyVis visualization
+**Goal**: Streamlit application for multi-gene TRAPI query integration with NetworkX clustering and LLM-assisted exploration using Cytoscape.js visualization
 
-**Current Status**: Phase 1 (Foundation & POC) ✅ COMPLETED | Phase 2 (Clustering) 🎯 IN PROGRESS
+**Current Status**: Phase 2 (Clustering & UI) ✅ COMPLETED | Phase 3 (RAG) 🎯 IN PROGRESS
 
 **Timeline**: 4 weeks MVP
 **Team**: 1-2 developers
-**Stack**: Python, Streamlit, NetworkX, PyVis, Claude API, TRAPI
+**Stack**: Python, Streamlit, NetworkX, st-link-analysis (Cytoscape.js), Claude API, TRAPI
 
-**Working Prototype**: `notebooks/multi_gene_pathfinder.ipynb` (end-to-end TRAPI query → visualization)
+**Working Application**: `app.py` (full Streamlit app with interactive visualization)
 
 ---
 
@@ -20,28 +20,31 @@ biograph_explorer/
 │   ├── settings.py              # Configuration management
 │   └── logging_config.py
 ├── core/
-│   ├── trapi_client.py          # TRAPI query & caching
-│   ├── graph_builder.py         # TRAPI → NetworkX conversion
-│   ├── clustering_engine.py     # NetworkX analysis (centrality, communities)
-│   └── rag_system.py            # Claude + NetworkX RAG with PyVis
+│   ├── trapi_client.py          # TRAPI query & caching ✅
+│   ├── graph_builder.py         # TRAPI → NetworkX conversion ✅
+│   ├── clustering_engine.py     # NetworkX analysis (centrality, communities) ✅
+│   └── rag_system.py            # Claude + NetworkX RAG (Phase 3)
 ├── utils/
-│   ├── validators.py            # Input validation
-│   ├── formatters.py            # Data formatting
-│   └── persistence.py           # Pickle NetworkX graphs
+│   ├── validators.py            # Input validation ✅
+│   ├── formatters.py            # Data formatting ✅
+│   └── persistence.py           # Pickle NetworkX graphs ✅
 ├── ui/
-│   ├── input_panel.py           # Gene/disease input
-│   ├── query_status.py          # Progress tracking
-│   ├── results_overview.py      # Summary dashboard
-│   ├── convergence_view.py      # Convergent nodes table
-│   ├── network_viz.py           # PyVis rendering
-│   └── rag_chat.py              # Visual RAG chat interface
+│   ├── input_panel.py           # Gene/disease input (integrated in app.py) ✅
+│   ├── query_status.py          # Progress tracking (integrated in app.py) ✅
+│   ├── results_overview.py      # Summary dashboard (integrated in app.py) ✅
+│   ├── convergence_view.py      # Convergent nodes table (integrated in app.py) ✅
+│   ├── network_viz.py           # Cytoscape.js rendering via st-link-analysis ✅
+│   └── rag_chat.py              # Visual RAG chat interface (Phase 3)
 ├── data/
-│   ├── cache/                   # TRAPI response cache
-│   ├── sessions/                # Pickled NetworkX graphs
-│   └── exports/                 # HTML/PNG exports
+│   ├── cache/                   # TRAPI response cache ✅
+│   ├── sessions/                # Session state (future: pickled graphs)
+│   ├── exports/                 # Visualization exports
+│   └── test_genes/              # Example datasets (Alzheimer's, COVID-19) ✅
 └── tests/
-    ├── test_trapi_client.py
-    ├── test_clustering.py
+    ├── test_trapi_client.py     ✅
+    ├── test_graph_builder.py    ✅
+    ├── test_clustering.py       ✅
+    ├── test_validators.py       ✅
     └── fixtures/
         └── alzheimers_test_case.json
 ```
@@ -72,7 +75,7 @@ biograph_explorer/
 ### Expected Outcomes (Validation Criteria)
 
 1. **Convergent nodes**: BACE1, β-amyloid, cholesterol metabolism proteins
-2. **Communities**: 
+2. **Communities**:
    - Cluster 1: Amyloid processing (APP, PSEN1/2, BACE1, BIN1)
    - Cluster 2: Lipid metabolism (APOE, CLU, ABCA7)
    - Cluster 3: Neuroinflammation (TREM2, CD33, CR1, MS4A6A)
@@ -81,30 +84,58 @@ biograph_explorer/
 
 ## Core Components
 
-### 1. TRAPI Client (`core/trapi_client.py`)
+### 1. TRAPI Client (`core/trapi_client.py`) ✅ COMPLETED
 - Batch query genes to disease
-- Rate limiting (10 queries/sec)
-- Response caching
+- Support for 1-hop (neighborhood discovery) and 2-hop (gene → intermediate → disease) patterns
+- Intermediate entity type filtering (Protein, ChemicalEntity, Gene, etc.)
+- Response caching in `data/cache/`
 - Retry logic with exponential backoff
-- Progress callbacks
+- Progress callbacks for Streamlit UI
+- Graceful degradation (accepts 40-60% API success rate)
 
-### 2. Graph Builder (`core/graph_builder.py`)
-- Convert TRAPI responses → NetworkX MultiDiGraph
-- Track source gene → node mappings
+### 2. Graph Builder (`core/graph_builder.py`) ✅ COMPLETED
+- Convert TRAPI responses → NetworkX DiGraph
+- Track source gene → node mappings (CURIE to symbol)
 - Calculate gene_frequency (convergence metric)
-- Pickle/unpickle graphs
-- Extract k-hop subgraphs
+- Rich node attributes: label, category, original_symbol, is_query_gene
+- Preserve edge attributes: predicate, knowledge_source, publications
+- Export to pickle format
 
-### 3. Clustering Engine (`core/clustering_engine.py`)
+### 3. Clustering Engine (`core/clustering_engine.py`) ✅ COMPLETED
 **Algorithms**:
-- Centrality: PageRank, betweenness, degree, closeness
+- Centrality: PageRank, betweenness, degree
 - Convergent nodes: Filter by gene_frequency ≥ threshold
 - Communities: Louvain algorithm (python-louvain)
-- Graph statistics: density, diameter, clustering coefficient
+- Graph statistics: density, average_degree, connected_components
 
-**Output**: ClusteringResults with ranked convergent nodes and community structure
+**Output**: ClusteringResults with:
+- List of communities with size, density, top nodes
+- Modularity score
+- Graph statistics
+- Ranked convergent nodes
 
-### 4. RAG System (`core/rag_system.py`)
+### 4. Cytoscape.js Visualization (`ui/network_viz.py`) ✅ COMPLETED
+**Features**:
+- st-link-analysis component (Streamlit-native Cytoscape.js)
+- Multiple layout algorithms: cose, fcose, circle, grid, breadthfirst, concentric
+- Material Icons for node categories (biotech, local_hospital, science, medication, nature, etc.)
+- Node sizing by: gene_frequency, pagerank, betweenness, degree
+- Color scheme by category:
+  - Gene: Red (#E74C3C)
+  - Disease: Purple (#9B59B6)
+  - Protein: Cyan (#4ECDC4)
+  - ChemicalEntity: Orange (#F39C12)
+  - BiologicalProcess: Green (#2ECC71)
+  - Cluster: Teal (#16A085)
+  - Other: Blue (#3498DB)
+- Smart graph sampling (guarantees ≥2 edges per query gene)
+- Built-in fullscreen and JSON export
+
+**Configuration**:
+- <200 nodes: Full rendering
+- \>200 nodes: Auto-sample with warning
+
+### 5. RAG System (`core/rag_system.py`) 📋 PLANNED (Phase 3)
 **Context Strategy** (3-layer):
 - Layer 1: Graph statistics + top convergent nodes (2K tokens)
 - Layer 2: Question-relevant subgraph (3-8K tokens)
@@ -114,34 +145,13 @@ biograph_explorer/
 - Claude Haiku 4 with tool use (structured output)
 - Tool: `cite_graph_evidence` returns node_ids, metric_name, metric_value
 - Validation: Check citations against actual graph
-- Visualization: Extract subgraph → render with PyVis
-
-### 5. PyVis Visualization (`ui/network_viz.py`)
-**Features**:
-- Physics-based layout (forceAtlas2)
-- Node sizing by gene_frequency or centrality
-- Node coloring by biolink category
-- Hover tooltips with full properties
-- Interactive drag/zoom/pan
-- Export to standalone HTML
-
-**Configuration**:
-- <30 nodes: forceAtlas2, 100 iterations
-- 30-100 nodes: barnesHut, 150 iterations  
-- \>100 nodes: Show warning, reduce node size
-- \>200 nodes: Auto-sample or warn user
-
-**Citation Display**:
-- Cited nodes: Red/enlarged
-- Context nodes: Teal/standard size
-- Edge width by confidence score
-- Embedded in Streamlit via `st.components.v1.html()`
+- Visualization: Extract subgraph → render with Cytoscape.js
 
 ---
 
 ## Test Case: Alzheimer's Disease (15 genes)
 
-**Genes**: APOE, APP, PSEN1, PSEN2, MAPT, TREM2, CLU, CR1, BIN1, PICALM, CD33, MS4A6A, ABCA7, SORL1, BACE1  
+**Genes**: APOE, APP, PSEN1, PSEN2, MAPT, TREM2, CLU, CR1, BIN1, PICALM, CD33, MS4A6A, ABCA7, SORL1, BACE1
 **Disease**: MONDO:0004975
 
 **Expected Results**:
@@ -155,15 +165,52 @@ biograph_explorer/
 
 ## Data Persistence Strategy
 
-### Critical Checkpoint Points
+### Current Implementation
 
-| Stage | Checkpoint | File Location | Purpose |
-|-------|-----------|---------------|---------|
-| Input | Gene list validated | `sessions/{id}/input_config.json` | Resume if interrupted |
-| TRAPI | Individual responses | `cache/trapi_{gene}_{disease}.json` | Avoid re-querying |
-| Clustering | All results | `sessions/{id}/clustering_results.json` | Preserve clustering results for previous queries |
-| RAG | Conversation | `sessions/{id}/conversation.json` | Preserve chat history |
-| Export | Final reports | `exports/{id}_report_{timestamp}.pdf` | Deliverable |
+| Stage | Location | Status | Purpose |
+|-------|----------|--------|---------|
+| TRAPI Responses | `data/cache/` | ✅ | Individual API responses cached by query hash |
+| Session State | Streamlit session_state | ✅ | In-memory graph, clustering results, query genes |
+| Exports | `data/exports/` | ✅ | Standalone HTML visualizations |
+
+### Planned: Load Previous Query Feature 📋 NEW
+
+**Goal**: Allow users to reload previous query results from cached data without re-querying APIs
+
+**Implementation**:
+1. **Session Folder Structure**:
+   ```
+   data/sessions/{session_id}/
+   ├── input_config.json          # Gene list, disease CURIE, query pattern
+   ├── trapi_response.pkl         # Full TRAPIResponse object
+   ├── graph.pkl                  # NetworkX graph with all attributes
+   ├── clustering_results.pkl     # ClusteringResults object
+   └── metadata.json              # Timestamp, query stats, API success rate
+   ```
+
+2. **UI Integration**:
+   - Sidebar: "Load Previous Query" expander
+   - List available sessions from `data/sessions/` with metadata (date, gene count, disease)
+   - Select session → populate session state → navigate to results view
+   - Display "⚠️ Loaded from cache" banner
+
+3. **Save Session**:
+   - Button in results view: "💾 Save Session"
+   - Generate session_id from timestamp + gene list hash
+   - Serialize all session state to folder
+   - Show success message with session_id
+
+4. **Auto-save**:
+   - Optional: Auto-save after successful query completion
+   - Configurable in settings (default: enabled)
+
+**Benefits**:
+- No re-querying when exploring different visualizations
+- Share sessions via folder export
+- Track analysis history
+- Resume interrupted sessions
+
+---
 
 ## Development Phases
 
@@ -186,143 +233,172 @@ biograph_explorer/
 - Retrieved 1,537 edges (812 unique after dedup) from knowledge graphs
 - Built graph with 476 nodes, 723 edges, single connected component
 
-**Current Implementation**: Single notebook architecture with complete end-to-end workflow
+---
+
+### Phase 2: Graph Processing, Clustering & UI ✅ COMPLETED
+**Goal**: Convert notebook prototype to modular package with clustering and Streamlit UI
+
+**Accomplishments**:
+1. **Modular Package Structure** ✅
+   - ✅ `core/trapi_client.py` - TRAPI querying with caching
+   - ✅ `core/graph_builder.py` - NetworkX graph construction
+   - ✅ `core/clustering_engine.py` - Louvain community detection + centrality
+   - ✅ `utils/persistence.py` - Session persistence utilities
+   - ✅ `utils/validators.py` - Input validation for genes and disease CURIEs
+   - ✅ `utils/formatters.py` - Data formatting utilities
+   - ✅ `ui/network_viz.py` - Cytoscape.js visualization
+
+2. **Clustering Implementation** ✅
+   - ✅ Louvain community detection
+   - ✅ Centrality metrics: PageRank, betweenness, degree
+   - ✅ Hub node identification within clusters
+   - ✅ Graph statistics: density, modularity, connected components
+
+3. **Streamlit UI** ✅
+   - ✅ Input panel with three methods: Example datasets, CSV upload, Manual entry
+   - ✅ Query pattern selector: 1-hop vs 2-hop with intermediate type filtering
+   - ✅ Progress tracking during query execution
+   - ✅ Three-tab results view:
+     - Overview: Graph metrics, statistics, node categories
+     - Network: Interactive Cytoscape.js visualization with controls
+     - Communities: Community detection results with top nodes
+   - ✅ Node inspection panel with detailed metrics and edges
+   - ✅ Layout algorithm selector (6 options)
+   - ✅ Node sizing metric selector
+   - ✅ Graph sampling slider
+   - ✅ Cluster view toggle (meta-graph)
+
+4. **Visualization Migration** ✅
+   - ✅ Migrated from PyVis to st-link-analysis (Cytoscape.js)
+   - ✅ Material Icons for biological entity types
+   - ✅ Multiple layout algorithms
+   - ✅ Better Streamlit integration (no iframe)
+   - ✅ Built-in fullscreen and JSON export
+
+**Outcomes**:
+- ✅ Modular codebase following architecture plan
+- ✅ 3-4 detected communities for Alzheimer's test case
+- ✅ Full-featured Streamlit app for running queries
+- ✅ Example datasets (Alzheimer's, COVID-19) included
+- ✅ Test suite with >80% coverage
 
 ---
 
-### Phase 2: Graph Processing & Clustering 🎯 IN PROGRESS
-**Goal**: Convert notebook prototype to modular package with clustering capabilities
+### Phase 3: RAG + Session Management 🎯 IN PROGRESS
+**Goal**: LLM-assisted exploration with Claude API integration and session persistence
 
 **Tasks**:
-1. **Refactor to Package Structure**
-   - [ ] Create `core/trapi_client.py` from notebook cells
-   - [ ] Create `core/graph_builder.py` with NetworkX construction
-   - [ ] Create `utils/persistence.py` for caching/serialization
-   - [ ] Move visualization logic to `ui/network_viz.py`
+1. **Session Management** 📋 NEW
+   - [ ] Implement session folder structure (`data/sessions/{id}/`)
+   - [ ] Create session save/load functions in `utils/persistence.py`
+   - [ ] Add "Load Previous Query" UI in sidebar
+   - [ ] Add "Save Session" button in results view
+   - [ ] Display session metadata (date, genes, disease, stats)
+   - [ ] Optional auto-save after query completion
 
-2. **Implement Clustering**
-   - [ ] Add Louvain community detection (`core/clustering_engine.py`)
-   - [ ] Compute centrality metrics (PageRank, betweenness, degree)
-   - [ ] Identify hub nodes within clusters
-   - [ ] Add cluster statistics (size, density, modularity)
-
-3. **Basic Streamlit UI**
-   - [ ] Gene input panel with validation
-   - [ ] Query status/progress tracking
-   - [ ] Results overview dashboard
-   - [ ] Cluster visualization with PyVis
-
-**Expected Outcomes**:
-- Modular codebase following planned architecture
-- 3-4 detected communities for Alzheimer's test case
-- Basic Streamlit app for running queries
-
----
-
-### Phase 3: RAG + Advanced Visualization 📋 PLANNED
-**Goal**: LLM-assisted exploration with Claude API integration
-
-**Tasks**:
-1. **RAG System**
+2. **RAG System**
    - [ ] Implement 3-layer context strategy
    - [ ] Claude Haiku 4 integration with tool use
    - [ ] Citation validation logic
    - [ ] Subgraph extraction for citations
 
-2. **Enhanced Visualization**
-   - [ ] PyVis renderer with physics-based layouts
-   - [ ] Node sizing by convergence metrics
-   - [ ] Hover tooltips with full node properties
-   - [ ] Citation highlighting (cited nodes enlarged)
-
 3. **Interactive Chat UI**
-   - [ ] Streamlit chat interface
-   - [ ] Click citation → expand PyVis subgraph
-   - [ ] Export to standalone HTML
+   - [ ] Streamlit chat interface in new tab
+   - [ ] Click citation → highlight nodes in visualization
+   - [ ] Question answering about convergent nodes
+   - [ ] Explanation of community structure
+   - [ ] Drug target recommendations
+
+4. **Multiple Predicates Handling** 📋 NEW
+   - [ ] Switch from `DiGraph` to `MultiDiGraph` in `graph_builder.py`
+   - [ ] Update edge processing in `network_viz.py` to aggregate predicates for visualization
+   - [ ] Display multiple predicates as comma-separated or count (e.g., "3 relationships")
+   - [ ] Store full predicate list in edge tooltip data
+   - [ ] Update edge styles to handle aggregated predicate labels
+   - [ ] Add style for "multiple_predicates" edges
+
+**Expected Outcomes**:
+- [ ] Users can save and reload query sessions
+- [ ] RAG system answers questions about graph
+- [ ] Citations link to visual evidence in Cytoscape.js
+- [ ] Chat interface integrated in results view
+- [ ] All TRAPI relationships preserved without edge overwrites
 
 ---
 
 ### Phase 4: UI Polish & Production 📋 PLANNED
-**Goal**: Production-ready application with full test coverage
+**Goal**: Production-ready application with deployment
 
 **Tasks**:
-1. **Complete UI**
+1. **Enhanced UI**
    - [ ] Convergent nodes table with sorting/filtering
-   - [ ] Session management (save/load graphs)
-   - [ ] Export to HTML, PNG, PDF
+   - [ ] Session history viewer
+   - [ ] Batch session export/import
+   - [ ] Export to PNG, PDF reports
 
 2. **Testing & Documentation**
-   - [ ] Test suite with >80% coverage
-   - [ ] User guide and examples
-   - [ ] API documentation
-   - [ ] Alzheimer's test case validation
+   - [ ] Expand test suite to >90% coverage
+   - [ ] User guide with screenshots
+   - [ ] API documentation (ReadTheDocs)
+   - [ ] Video tutorials
 
 3. **Deployment**
    - [ ] Streamlit Cloud deployment
    - [ ] ReadTheDocs documentation
    - [ ] PyPI package release
+   - [ ] Docker container
 
 ---
 
 ## Dependencies
 
+**Current** (`pyproject.toml`):
+```toml
+python = ">=3.11,<4.0"
+tct = "^0.1.4"
+streamlit = "^1.50.0"
+st-link-analysis = "^0.4.0"  # ✅ NEW (replaced pyvis)
+pydantic = "^2.11.9"
+networkx = "^3.5"
+pandas = "^2.2.1"
+python-louvain = "^0.16"
 ```
-streamlit==1.32.0
-anthropic==0.21.3
-networkx==3.2.1
-python-louvain==0.16
-pyvis==0.3.2
-matplotlib==3.8.3
-pydantic==2.6.3
-requests==2.31.0
-pandas==2.2.1
-pytest==8.1.1
+
+**Planned** (Phase 3):
+```toml
+anthropic = "^0.40.0"  # Claude API
 ```
 
 ---
 
-## RAG Citation Workflow
+## Cytoscape.js Configuration
 
-1. **User asks**: "Why is BACE1 a high-priority target?"
-2. **Context retrieval**: Extract BACE1 node + 1-hop neighbors + metrics
-3. **LLM generates**: Answer with structured citations via tool use
-4. **System validates**: Check node IDs exist, metrics match
-5. **User clicks citation**: PyVis graph expands showing cited subgraph
-6. **User explores**: Hover nodes, drag to reposition, click to expand
-7. **Export**: Download standalone HTML or screenshot
+**Layout Algorithms** (st-link-analysis):
+- **cose**: Physics-based, good for general graphs (default)
+- **fcose**: Fast force-directed, better for large graphs
+- **circle**: Circular layout
+- **grid**: Grid layout
+- **breadthfirst**: Hierarchical tree layout
+- **concentric**: Concentric circles by centrality
 
----
+**Node Styling**:
+- Size: `15px + (normalized_metric * 30px)` (range: 15-45px)
+- Query genes: minimum 25px
+- Color: Category-based (see section 4 above)
+- Icon: Material Icons by category
 
-## PyVis Configuration
+**Edge Styling**:
+- Color: Gray (#808080)
+- Caption: Predicate label (cleaned biolink term)
+- Directed: Yes (arrows shown)
+- Curve: Bezier
 
-**Physics settings**:
-```python
-{
-  "physics": {
-    "forceAtlas2Based": {
-      "gravitationalConstant": -50,
-      "springLength": 100
-    },
-    "solver": "forceAtlas2Based",
-    "stabilization": {"iterations": 150}
-  }
-}
-```
-
-**Node styling**:
-- Size: `base_size + (gene_frequency * 20)`
-- Color: Biolink category mapping (Gene=#FF6B6B, Protein=#4ECDC4, etc.)
-- Border: 2px standard, 4px for cited nodes
-
-**Tooltips**:
-```
-{node.name}
-ID: {node.id}
-Gene frequency: {gene_frequency}
-Betweenness: {betweenness:.1f}
-PageRank: {pagerank:.4f}
-Categories: {categories}
-```
+**Interaction**:
+- Drag to pan
+- Scroll to zoom
+- Click node to select (future: show in details panel)
+- Fullscreen button
+- JSON export button
 
 ---
 
@@ -332,14 +408,16 @@ Categories: {categories}
 |-----------|--------|-------|
 | 15-gene TRAPI batch | <5 min | With caching/parallelization |
 | Clustering analysis | <30 sec | NetworkX in-memory |
-| PyVis render (<100 nodes) | <3 sec | Physics stabilization |
-| PyVis render (100-200 nodes) | <8 sec | May show warning |
-| LLM response | <10 sec | Claude Haiku |
+| Cytoscape.js render (<100 nodes) | <2 sec | Fast layout algorithms |
+| Cytoscape.js render (100-200 nodes) | <5 sec | cose/fcose layouts |
+| LLM response | <10 sec | Claude Haiku (Phase 3) |
 | Page load | <2 sec | Any view |
+| Session save | <5 sec | Pickle serialization |
+| Session load | <3 sec | Pickle deserialization |
 
 ---
 
-## Model Selection: Claude Haiku 4
+## Model Selection: Claude Haiku 4 (Phase 3)
 
 **Why Haiku**:
 - Task is information extraction, not complex reasoning
@@ -351,29 +429,33 @@ Categories: {categories}
 
 ## Success Metrics
 
-**Phase 1 (Completed)**:
+**Phase 1 (Completed)** ✅:
 - ✅ Process 10 genes in <5 minutes (achieved: 1,537 raw edges, ~2 min)
 - ✅ Build NetworkX graph from TRAPI responses (476 nodes, 723 edges)
 - ✅ Render interactive visualization (ipycytoscape, 50-edge sampling)
 - ✅ Gene normalization with 100% success rate (10/10 COVID genes)
 - ✅ Graceful API degradation (40% success rate = sufficient)
 
-**Phase 2 (In Progress)**:
-- [ ] Detect 3-4 communities in Alzheimer's test case
-- [ ] Identify convergent nodes (BACE1, Aβ expected)
-- [ ] Modular package structure following architecture plan
-- [ ] Basic Streamlit UI for running queries
+**Phase 2 (Completed)** ✅:
+- ✅ Detect 3-4 communities in Alzheimer's test case
+- ✅ Identify convergent nodes (gene_frequency metric)
+- ✅ Modular package structure following architecture plan
+- ✅ Full-featured Streamlit UI with three-tab results view
+- ✅ Interactive Cytoscape.js visualization with 6 layout algorithms
+- ✅ Test suite with >80% coverage
 
-**Phase 3 (Planned)**:
+**Phase 3 (In Progress)** 🎯:
+- [ ] Session save/load functionality working
+- [ ] Users can browse and reload previous queries
 - [ ] RAG system with Claude Haiku 4
 - [ ] Citation accuracy >90% (metrics match graph)
-- [ ] PyVis visualization with physics-based layouts
-- [ ] Export to standalone HTML
+- [ ] Chat interface integrated in results view
 
-**Phase 4 (Planned)**:
-- [ ] Test suite with >80% coverage
+**Phase 4 (Planned)** 📋:
 - [ ] Non-expert can run analysis in <10 clicks
 - [ ] Complete documentation (README, user guide, API docs)
+- [ ] Streamlit Cloud deployment
+- [ ] PyPI package release
 
 ---
 
@@ -381,27 +463,50 @@ Categories: {categories}
 
 | Risk | Mitigation |
 |------|------------|
-| TRAPI downtime | Cache all responses, retry logic |
-| PyVis performance (>200 nodes) | Sample nodes or show warning |
-| Citation parsing errors | Use structured output (tool use) |
+| TRAPI downtime | ✅ Cache all responses, retry logic |
+| Large graphs (>200 nodes) | ✅ Auto-sample with warning, cluster view |
+| Citation parsing errors | Use structured output (tool use) - Phase 3 |
 | Browser compatibility | Test Chrome/Firefox/Safari |
-| Physics doesn't stabilize | Max iteration limit (150) |
+| Session file corruption | Validate on load, keep backups |
+| Large session files | Compress pickles, set retention policy |
 
 ---
 
 ## Future Enhancements (Post-MVP)
 
-- Multi-disease comparison
-- Augmenting the TRAPI response graphs with addtional data sources (WikiPathways, PFOCR, Human Proteing Atlas)
+- Multi-disease comparison view
+- Augmenting TRAPI graphs with additional data sources:
+  - WikiPathways
+  - PFOCR
+  - Human Protein Atlas
+  - STRING protein interactions
+- Differential analysis (compare gene sets)
+- Export to Cytoscape desktop format
+- API endpoint for programmatic access
+- Collaborative sessions (multi-user)
+- Integration with notebook environments (Jupyter widget)
 
 ---
 
 ## Deliverables
 
+**Phase 2 (Completed)** ✅:
+1. ✅ Working Streamlit app (`app.py`)
+2. ✅ Modular package structure
+3. ✅ Interactive Cytoscape.js visualization
+4. ✅ Example datasets (Alzheimer's, COVID-19)
+5. ✅ Test suite with >80% coverage
+6. ✅ Documentation (README, CLAUDE.md)
 
-1. Working Streamlit app
-2. Alzheimer's test case validated
-3. Documentation (README, user guide)
-4. Example session exports (HTML graphs)
-5. Test suite with >80% coverage
+**Phase 3 (In Progress)** 🎯:
+1. Session management system
+2. RAG chat interface
+3. Citation validation
+4. Enhanced user guide
 
+**Phase 4 (Planned)** 📋:
+1. Streamlit Cloud deployment
+2. ReadTheDocs documentation
+3. PyPI package
+4. Video tutorials
+5. Example session exports

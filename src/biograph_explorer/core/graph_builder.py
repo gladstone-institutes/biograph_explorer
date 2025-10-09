@@ -118,6 +118,7 @@ class GraphBuilder:
                     knowledge_source=edge_attrs.get('knowledge_source', []),
                     publications=edge_attrs.get('publications', []),
                     qualifiers=edge_attrs.get('qualifiers', []),
+                    query_result_id=edge_attrs.get('query_result_id'),  # Preserve query result ID for sampling
                 )
 
         logger.info(f"Created graph: {graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges")

@@ -4,11 +4,9 @@ Main Streamlit app for multi-gene TRAPI query integration with NetworkX clusteri
 """
 
 import streamlit as st
-import streamlit.components.v1 as components
 from pathlib import Path
 import pandas as pd
 import logging
-from datetime import datetime
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -53,6 +51,8 @@ if 'response' not in st.session_state:
     st.session_state.response = None
 if 'selected_node' not in st.session_state:
     st.session_state.selected_node = None
+if 'disease_curie' not in st.session_state:
+    st.session_state.disease_curie = None
 
 # Title
 st.title("🧬 BioGraph Explorer")
@@ -64,7 +64,7 @@ st.sidebar.header("📥 Input Configuration")
 # Input method selection
 input_method = st.sidebar.radio(
     "Input Method",
-    ["Example Dataset", "Upload CSV", "Manual Entry"],
+    ["Example Dataset", "Upload CSV", "Manual Entry", "Load Cached Query"],
     index=0
 )
 
@@ -89,7 +89,7 @@ if input_method == "Example Dataset":
         genes = df['gene_symbol'].tolist()
         st.sidebar.success(f"✓ Loaded {len(genes)} genes from example dataset")
         with st.sidebar.expander("View genes"):
-            st.dataframe(df, use_container_width=True)
+            st.dataframe(df, width='stretch')
     except Exception as e:
         st.sidebar.error(f"Error loading example: {e}")
 
@@ -107,24 +107,101 @@ elif input_method == "Upload CSV":
                 genes = df['gene_symbol'].tolist()
                 st.sidebar.success(f"✓ Loaded {len(genes)} genes from CSV")
                 with st.sidebar.expander("View genes"):
-                    st.dataframe(df, use_container_width=True)
+                    st.dataframe(df, width='stretch')
             else:
                 st.sidebar.error("CSV must have 'gene_symbol' column")
         except Exception as e:
             st.sidebar.error(f"Error reading CSV: {e}")
 
-else:  # Manual Entry
+elif input_method == "Manual Entry":
     gene_text = st.sidebar.text_area(
         "Gene Symbols",
         height=150,
         help="Enter gene symbols, one per line or comma-separated",
         placeholder="APOE\nAPP\nPSEN1\n..."
     )
-    
+
     if gene_text:
         # Parse input
         genes = [g.strip().upper() for g in gene_text.replace(',', '\n').split('\n') if g.strip()]
         st.sidebar.info(f"📝 {len(genes)} genes entered")
+
+else:  # Load Cached Query
+    # List available cached files using TRAPIClient
+    cache_dir = Path("data/cache")
+    client = TRAPIClient(cache_dir=cache_dir)
+    cached_files = client.list_cached_queries()
+
+    if cached_files:
+        selected_cache = st.sidebar.selectbox(
+            "Select Cached Query",
+            options=range(len(cached_files)),
+            format_func=lambda i: cached_files[i]["label"],
+            help="Load a previously cached TRAPI query result"
+        )
+
+        if st.sidebar.button("📂 Load Cache", type="primary"):
+            selected_file = cached_files[selected_cache]["path"]
+
+            try:
+                cached_response = client._load_cached_response(selected_file)
+
+                if cached_response:
+                    st.sidebar.success(f"✓ Loaded {len(cached_response.edges)} edges from cache")
+
+                    # Build graph from cached response
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+
+                    status_text.text("Building graph from cached data...")
+                    progress_bar.progress(30)
+
+                    builder = GraphBuilder()
+                    engine = ClusteringEngine()
+
+                    curie_to_symbol = cached_response.metadata.get("curie_to_symbol", {})
+                    kg = builder.build_from_trapi_edges(
+                        cached_response.edges,
+                        cached_response.input_genes,
+                        curie_to_symbol
+                    )
+
+                    progress_bar.progress(60)
+
+                    # Calculate gene frequency
+                    gene_freq = builder.calculate_gene_frequency(kg.graph, cached_response.input_genes)
+                    for node, freq in gene_freq.items():
+                        kg.graph.nodes[node]['gene_frequency'] = freq
+
+                    progress_bar.progress(70)
+
+                    # Cluster
+                    status_text.text("Detecting communities...")
+                    results = engine.analyze_graph(kg.graph, cached_response.input_genes)
+
+                    progress_bar.progress(90)
+
+                    # Save to session state
+                    st.session_state.graph = kg.graph
+                    st.session_state.clustering_results = results
+                    st.session_state.query_genes = cached_response.input_genes
+                    st.session_state.response = cached_response
+                    st.session_state.disease_curie = cached_response.target_disease
+
+                    progress_bar.progress(100)
+                    status_text.text("✓ Cache loaded successfully!")
+
+                    st.rerun()
+
+                else:
+                    st.sidebar.error("Failed to load cached file")
+
+            except Exception as e:
+                st.sidebar.error(f"Error loading cache: {e}")
+                import traceback
+                st.sidebar.code(traceback.format_exc())
+    else:
+        st.sidebar.warning("No cached queries found. Run a query first to create cached results.")
 
 # Disease CURIE input
 disease_curie = st.sidebar.text_input(
@@ -178,7 +255,6 @@ st.sidebar.markdown("---")
 run_query = st.sidebar.button(
     "🚀 Run Query",
     type="primary",
-    use_container_width=True,
     disabled=len(genes) == 0
 )
 
@@ -198,7 +274,7 @@ if not run_query and not st.session_state.graph:
         - **Query TRAPI** APIs for knowledge graph edges
         - **Build graph** with NetworkX
         - **Detect communities** using Louvain algorithm
-        - **Visualize** with interactive PyVis graphs
+        - **Visualize** with interactive Cytoscape.js graphs
         """)
     
     with col2:
@@ -304,6 +380,7 @@ if run_query:
         st.session_state.clustering_results = results
         st.session_state.query_genes = response.input_genes
         st.session_state.response = response
+        st.session_state.disease_curie = disease_curie  # Store for visualization sampling
         
         progress_bar.progress(100)
         status_text.text("✓ Analysis complete!")
@@ -363,13 +440,13 @@ if st.session_state.graph:
             )
         ])
         if not category_df.empty:
-            st.dataframe(category_df, use_container_width=True)
+            st.dataframe(category_df, width='stretch')
     
     with tab2:
         st.header("Knowledge Graph Visualization")
 
         # Visualization controls
-        col1, col2, col3, col4, col5 = st.columns([2, 2, 1, 1, 1])
+        col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
 
         with col1:
             sizing_metric = st.selectbox(
@@ -380,151 +457,117 @@ if st.session_state.graph:
             )
 
         with col2:
-            max_nodes = st.slider(
-                "Max Nodes",
-                min_value=50,
-                max_value=200,
-                value=100,
-                step=10,
-                help="Maximum number of nodes to display (graph will be sampled if larger)"
+            layout_options = [
+                ("dagre", "Dagre (Hierarchical) - DEFAULT"),
+                ("fcose", "fCoSE (Force-Directed)"),
+                ("cola", "Cola (Constrained Force)"),
+                ("cose-bilkent", "CoSE-Bilkent (Advanced Force)"),
+                ("breadthfirst", "Breadth-First (Radial)"),
+                ("cose", "CoSE (Basic Force)"),
+                ("circle", "Circle"),
+                ("grid", "Grid"),
+                ("concentric", "Concentric"),
+            ]
+
+            layout = st.selectbox(
+                "Layout Algorithm",
+                options=[opt[0] for opt in layout_options],
+                format_func=lambda x: next(opt[1] for opt in layout_options if opt[0] == x),
+                index=0,
+                help="Dagre creates hierarchical layouts ideal for gene → intermediate → disease flows"
             )
 
         with col3:
-            freeze_layout = st.checkbox(
-                "Freeze Layout",
-                value=True,
-                help="Disable physics after stabilization to prevent excessive movement"
+            # Calculate total intermediate nodes (non-query genes)
+            if st.session_state.graph:
+                query_gene_set = set(st.session_state.query_genes)
+                intermediate_count = sum(
+                    1 for node in st.session_state.graph.nodes()
+                    if node not in query_gene_set and node != st.session_state.disease_curie
+                )
+                max_slider_value = max(intermediate_count, 10)  # At least 10
+                default_value = min(200, intermediate_count)  # Default to 200 or total if less
+            else:
+                max_slider_value = 500
+                default_value = 200
+
+            max_intermediates = st.slider(
+                "Top Intermediates",
+                min_value=10,
+                max_value=max_slider_value,
+                value=default_value,
+                step=10,
+                help="Number of top intermediate nodes to display, ranked by connections to query genes"
             )
 
         with col4:
-            cluster_view = st.checkbox(
-                "Cluster View",
-                value=False,
-                help="Group nodes by community (shows meta-graph)"
+            # Build cluster options
+            cluster_options = ["All Nodes"]
+            if st.session_state.clustering_results:
+                for comm in st.session_state.clustering_results.communities:
+                    cluster_options.append(f"Cluster {comm.community_id} ({comm.size} nodes)")
+
+            selected_cluster = st.selectbox(
+                "Filter by Cluster",
+                options=cluster_options,
+                index=0,
+                help="View all nodes or filter to a specific community"
             )
 
-        with col5:
-            export_html = st.button("📥 Export", help="Save visualization as standalone HTML file")
+        # Render st-link-analysis visualization
+        from biograph_explorer.ui.network_viz import render_network_visualization
+        from st_link_analysis import st_link_analysis
 
-        if export_html:
-            from biograph_explorer.ui.network_viz import export_visualization_html
-            output_path = Path("data/exports") / f"network_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
-            try:
-                result_path = export_visualization_html(
-                    st.session_state.graph,
-                    st.session_state.query_genes,
-                    output_path
-                )
-                st.success(f"✓ Exported to {result_path}")
-            except Exception as e:
-                st.error(f"Export failed: {e}")
+        # Determine which graph to visualize based on cluster selection
+        if selected_cluster != "All Nodes" and st.session_state.clustering_results:
+            # Extract cluster ID from selection (e.g., "Cluster 0 (45 nodes)" -> 0)
+            cluster_id = int(selected_cluster.split()[1])
 
-        # Two-column layout: visualization + node details
-        viz_col, details_col = st.columns([7, 3])
+            # Find the selected community
+            selected_community = None
+            for comm in st.session_state.clustering_results.communities:
+                if comm.community_id == cluster_id:
+                    selected_community = comm
+                    break
 
-        with viz_col:
-            # Node inspection input
-            inspect_node_id = st.text_input(
-                "🔍 Inspect Node (paste CURIE from tooltip)",
-                value=st.session_state.selected_node or "",
-                help="Paste a node ID (e.g., NCBIGene:1803) to view details",
-                key="node_inspect_input"
-            )
+            if selected_community:
+                # Create subgraph with only nodes from this cluster
+                cluster_nodes = selected_community.nodes
+                display_graph = st.session_state.graph.subgraph(cluster_nodes).copy()
 
-            if inspect_node_id and inspect_node_id != st.session_state.selected_node:
-                st.session_state.selected_node = inspect_node_id
-
-            # Render PyVis visualization
-            from biograph_explorer.ui.network_viz import render_network_visualization, create_clustered_graph
-
-            # Determine which graph to visualize
-            if cluster_view and st.session_state.clustering_results:
-                # Create cluster meta-graph
-                display_graph = create_clustered_graph(
-                    st.session_state.graph,
-                    st.session_state.clustering_results,
-                    st.session_state.query_genes
-                )
-                st.info(f"ℹ️ Showing {display_graph.number_of_nodes()} clusters (from {st.session_state.graph.number_of_nodes()} nodes)")
+                st.info(f"ℹ️ Showing Cluster {cluster_id}: {display_graph.number_of_nodes()} nodes, {display_graph.number_of_edges()} edges")
             else:
                 display_graph = st.session_state.graph
+        else:
+            display_graph = st.session_state.graph
 
-            with st.spinner("Rendering interactive network..."):
-                html = render_network_visualization(
-                    display_graph,
-                    st.session_state.query_genes,
-                    sizing_metric=sizing_metric,
-                    max_nodes=max_nodes,
-                    freeze_layout=freeze_layout,
-                )
+        # Prepare visualization data
+        viz_data = render_network_visualization(
+            display_graph,
+            st.session_state.query_genes,
+            sizing_metric=sizing_metric,
+            layout=layout,
+            max_intermediates=max_intermediates,
+            disease_curie=st.session_state.disease_curie,
+        )
 
-            if html:
-                components.html(html, height=700, scrolling=True)
+        if viz_data:
+            # Render component
+            st_link_analysis(
+                viz_data["elements"],
+                layout=viz_data["layout"],
+                node_styles=viz_data["node_styles"],
+                edge_styles=viz_data["edge_styles"],
+                key="biograph_network"
+            )
 
-                st.caption("""
-                **💡 How to explore:**
-                - **Drag** nodes to rearrange • **Scroll** to zoom
-                - **Hover** for details • **Copy node ID** from tooltip and paste above to inspect
-                """)
-            else:
-                st.error("Failed to render visualization")
-
-        with details_col:
-            st.subheader("📌 Node Details")
-
-            if st.session_state.selected_node:
-                from biograph_explorer.ui.network_viz import get_node_details
-
-                node_details = get_node_details(st.session_state.selected_node, st.session_state.graph)
-
-                if "error" in node_details:
-                    st.error(node_details["error"])
-                else:
-                    # Display node information
-                    if node_details["original_symbol"]:
-                        st.markdown(f"**{node_details['original_symbol']}**")
-                        st.caption(node_details["label"])
-                    else:
-                        st.markdown(f"**{node_details['label']}**")
-
-                    st.caption(f"`{node_details['node_id']}`")
-
-                    if node_details["is_query_gene"]:
-                        st.markdown("🔴 **Query Gene**")
-
-                    st.markdown(f"**Category:** {node_details['category']}")
-
-                    # Metrics
-                    st.markdown("**📊 Metrics**")
-                    metrics = node_details["metrics"]
-                    st.markdown(f"- Gene Frequency: **{metrics['gene_frequency']}**")
-                    st.markdown(f"- PageRank: **{metrics['pagerank']:.4f}**")
-                    st.markdown(f"- Betweenness: **{metrics['betweenness']:.1f}**")
-                    st.markdown(f"- Degree: **{metrics['degree']}** ({metrics['in_degree']} in, {metrics['out_degree']} out)")
-
-                    # Edges
-                    st.markdown(f"**🔗 Edges ({node_details['total_edges']})**")
-                    for predicate, edges in sorted(node_details["edges_by_predicate"].items()):
-                        with st.expander(f"{predicate.replace('_', ' ').title()} ({len(edges)})", expanded=len(node_details["edges_by_predicate"]) == 1):
-                            for edge in edges[:5]:  # Limit to 5 per predicate
-                                direction_icon = "←" if edge["direction"] == "incoming" else "→"
-                                target_key = "source_label" if edge["direction"] == "incoming" else "target_label"
-                                st.markdown(f"{direction_icon} {edge[target_key][:40]}")
-                            if len(edges) > 5:
-                                st.caption(f"... and {len(edges) - 5} more")
-
-                    # Sources
-                    if node_details["knowledge_sources"]:
-                        st.markdown(f"**📚 Knowledge Sources ({len(node_details['knowledge_sources'])})**")
-                        for source in node_details["knowledge_sources"][:10]:
-                            if source:  # Some sources may be empty
-                                st.markdown(f"- {source}")
-                        if len(node_details["knowledge_sources"]) > 10:
-                            st.caption(f"... and {len(node_details['knowledge_sources']) - 10} more")
-                    else:
-                        st.caption("_No source information available_")
-            else:
-                st.info("👆 Paste a node ID above to view detailed information")
+            st.caption("""
+            **💡 How to explore:**
+            - **Drag** to pan • **Scroll** to zoom • **Click** node to select
+            - **Fullscreen** button in top-right • **Export JSON** for external tools
+            """)
+        else:
+            st.error("Failed to render visualization")
     
     with tab3:
         st.header("Community Detection Results")
@@ -546,4 +589,4 @@ if st.session_state.graph:
 
 # Footer
 st.divider()
-st.markdown("**BioGraph Explorer** | Built with Streamlit, NetworkX, TCT, and PyVis")
+st.markdown("**BioGraph Explorer** | Built with Streamlit, NetworkX, TCT, and Cytoscape.js")

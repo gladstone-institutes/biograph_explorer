@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-BioGraph Explorer is a Streamlit application for multi-gene TRAPI query integration with NetworkX clustering and LLM-assisted exploration using PyVis visualization. The project explores biomedical knowledge graphs by querying the NCATS Translator system to find convergent pathways and therapeutic targets.
+BioGraph Explorer is a Streamlit application for multi-gene TRAPI query integration with NetworkX clustering and LLM-assisted exploration using Cytoscape.js visualization via st-link-analysis. The project explores biomedical knowledge graphs by querying the NCATS Translator system to find convergent pathways and therapeutic targets.
 
 **Current Status**: Phase 1 (Foundation & POC) completed. The codebase currently consists of a working Jupyter notebook prototype (`notebooks/multi_gene_pathfinder.ipynb`). Phase 2 will involve refactoring into a modular Python package with Streamlit UI.
 
@@ -27,8 +27,8 @@ poetry install
 # Install TCT library (required for TRAPI queries)
 pip install TCT
 
-# Install visualization dependencies
-pip install ipycytoscape streamlit pyvis
+# Install visualization dependencies (handled by poetry)
+poetry install
 ```
 
 ### Testing
@@ -61,10 +61,10 @@ biograph_explorer/
 │   ├── trapi_client.py          # TRAPI query & caching
 │   ├── graph_builder.py         # TRAPI → NetworkX conversion
 │   ├── clustering_engine.py     # NetworkX analysis (centrality, communities)
-│   └── rag_system.py            # Claude + NetworkX RAG with PyVis
+│   └── rag_system.py            # Claude + NetworkX RAG
 ├── ui/
 │   ├── input_panel.py           # Gene/disease input
-│   ├── network_viz.py           # PyVis rendering
+│   ├── network_viz.py           # Cytoscape.js rendering via st-link-analysis
 │   └── rag_chat.py              # Visual RAG chat interface
 ├── utils/
 │   ├── validators.py            # Input validation
@@ -99,11 +99,13 @@ All functionality is currently in `notebooks/multi_gene_pathfinder.ipynb`:
 - Add rich node attributes: labels, categories (Gene/Disease/Other), is_query_gene flag
 - Preserve edge attributes: predicates, qualifiers, publications, knowledge_source
 
-**Visualization Sampling**:
-- Guarantee ≥2 edges per query gene to prevent missing nodes
-- Sample high-degree edges to fill budget
-- Use circle layout (fast, user can rearrange)
-- Color: Red (DE genes), Purple (disease), Blue (other)
+**Visualization**:
+- Interactive Cytoscape.js rendering via st-link-analysis component
+- Multiple layout algorithms: cose, fcose, circle, grid, breadthfirst, concentric
+- Material Icons for node categories (biotech, local_hospital, science, etc.)
+- Node sizing by metrics: gene_frequency, pagerank, betweenness, degree
+- Color scheme: Red (Genes), Purple (Disease), Cyan (Protein), Orange (Chemical), Green (BiologicalProcess), Blue (Other)
+- Graph sampling: Guarantee ≥2 edges per query gene, fill budget with high-degree edges
 
 ## Data Files
 
@@ -129,21 +131,21 @@ The primary validation dataset uses 15 Alzheimer's genes (APOE, APP, PSEN1, PSEN
 
 ## Phase 2 Goals (Next Steps - See CURRENT_PROGRESS.md)
 
-1. **Graph Clustering**: Louvain community detection, identify hub nodes
+1. **Graph Clustering**: Louvain community detection, identify hub nodes ✓
 2. **LLM Integration**: Claude Haiku 4 for cluster summarization
-3. **Streamlit UI**: Input panel, results dashboard, interactive PyVis visualization
+3. **Streamlit UI**: Input panel, results dashboard, interactive Cytoscape.js visualization ✓
 4. **RAG System**: 3-layer context strategy with citation validation
 
 ## Dependencies
 
 Core dependencies (see `pyproject.toml`):
-- Python ^3.10
+- Python ^3.11
 - TCT (Translator Clinical Tools) - for TRAPI queries
 - NetworkX - graph analysis
 - python-louvain - community detection
-- PyVis - interactive visualization
-- Streamlit - web UI (planned)
-- Anthropic - Claude API (planned)
+- st-link-analysis - interactive Cytoscape.js visualization
+- Streamlit - web UI
+- Anthropic - Claude API (for RAG system)
 
 ## Common Development Patterns
 
@@ -152,12 +154,17 @@ Core dependencies (see `pyproject.toml`):
 jupyter notebook notebooks/multi_gene_pathfinder.ipynb
 ```
 
+### Running the Streamlit App
+```bash
+poetry run streamlit run app.py
+```
+
 ### Querying New Gene Sets
-1. Define gene list (HUGO symbols)
-2. Normalize with `name_resolver.batch_lookup()`
-3. Query with empty target list for neighborhood discovery
-4. Sample edges ensuring all query genes are represented
-5. Visualize with ipycytoscape
+1. Define gene list (HUGO symbols) in the Streamlit UI
+2. Select query pattern (1-hop or 2-hop with intermediate types)
+3. Run query - app normalizes genes and queries TRAPI APIs
+4. View results in interactive Cytoscape.js visualization
+5. Explore communities and convergent nodes
 
 ### Handling API Errors
 - "NoneType is not iterable" = API returned no data (normal)
@@ -171,7 +178,7 @@ jupyter notebook notebooks/multi_gene_pathfinder.ipynb
 |-----------|--------|-------|
 | 15-gene TRAPI batch | <5 min | With caching/parallelization |
 | Clustering analysis | <30 sec | NetworkX in-memory |
-| PyVis render (<100 nodes) | <3 sec | Physics stabilization |
+| Cytoscape.js render (<100 nodes) | <2 sec | Fast layout algorithms |
 | LLM response | <10 sec | Claude Haiku |
 
 ## Model Selection

@@ -1,6 +1,6 @@
 # BioGraph Explorer 🧬
 
-Streamlit application for multi-gene TRAPI query integration with NetworkX clustering and LLM-assisted exploration using PyVis visualization.
+Streamlit application for multi-gene TRAPI query integration with NetworkX clustering and LLM-assisted exploration using Cytoscape.js visualization.
 
 ## Overview
 
@@ -12,8 +12,9 @@ BioGraph Explorer queries the NCATS Translator knowledge graph system to find co
 - 📊 NetworkX graph construction with rich node attributes
 - 🎯 Louvain community detection
 - 📈 Centrality analysis (PageRank, betweenness, degree)
-- 🎨 Interactive visualization (coming soon: PyVis)
+- 🎨 Interactive Cytoscape.js visualization with multiple layout algorithms
 - 💾 CSV import/export for gene lists
+- 🔬 Material Icons for biological entity types
 
 ## Installation
 
@@ -123,7 +124,7 @@ biograph_explorer/
 │       ├── input_panel.py         # Gene/disease input (Streamlit)
 │       ├── query_status.py        # Progress tracking
 │       ├── results_overview.py    # Dashboard
-│       ├── network_viz.py         # PyVis visualization
+│       ├── network_viz.py         # Cytoscape.js visualization
 │       └── convergence_view.py    # Convergent nodes table
 └── tests/
     └── fixtures/
@@ -158,7 +159,7 @@ poetry add <package-name>
 - **[NetworkX](https://networkx.org/)**: Graph analysis
 - **[python-louvain](https://github.com/taynaud/python-louvain)**: Community detection
 - **[Streamlit](https://streamlit.io/)**: Web UI
-- **[PyVis](https://pyvis.readthedocs.io/)**: Interactive visualization
+- **[st-link-analysis](https://github.com/AlrasheedA/st-link-analysis)**: Interactive Cytoscape.js visualization
 - **[Pydantic](https://docs.pydantic.dev/)**: Data validation
 
 ## API Notes
@@ -221,8 +222,10 @@ poetry add python-louvain
 - ✅ Progress tracking
 - ✅ Session state management
 
-**Phase 3 (Planned):**
-- 🔲 PyVis network visualization
+**Phase 3 (In Progress):**
+- ✅ Cytoscape.js network visualization with st-link-analysis
+- ✅ Multiple layout algorithms (cose, fcose, circle, grid, etc.)
+- ✅ Material Icons for entity types
 - 🔲 Claude RAG system integration
 - 🔲 Citation validation with subgraph extraction
 - 🔲 Interactive chat interface

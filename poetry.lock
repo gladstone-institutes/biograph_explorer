@@ -1597,25 +1597,6 @@ files = [
 dev = ["build (==1.2.2.post1)", "coverage (==7.5.4) ; python_version < \"3.9\"", "coverage (==7.8.0) ; python_version >= \"3.9\"", "mypy (==1.14.1) ; python_version < \"3.9\"", "mypy (==1.15.0) ; python_version >= \"3.9\"", "pip (==25.0.1)", "pylint (==3.2.7) ; python_version < \"3.9\"", "pylint (==3.3.6) ; python_version >= \"3.9\"", "ruff (==0.11.2)", "twine (==6.1.0)", "uv (==0.6.11)"]
 
 [[package]]
-name = "jsonpickle"
-version = "4.1.1"
-description = "jsonpickle encodes/decodes any Python object to/from JSON"
-optional = false
-python-versions = ">=3.8"
-groups = ["main"]
-files = [
-    {file = "jsonpickle-4.1.1-py3-none-any.whl", hash = "sha256:bb141da6057898aa2438ff268362b126826c812a1721e31cf08a6e142910dc91"},
-    {file = "jsonpickle-4.1.1.tar.gz", hash = "sha256:f86e18f13e2b96c1c1eede0b7b90095bbb61d99fedc14813c44dc2f361dbbae1"},
-]
-
-[package.extras]
-cov = ["pytest-cov"]
-dev = ["black", "pyupgrade"]
-docs = ["furo", "rst.linker (>=1.9)", "sphinx (>=3.5)"]
-packaging = ["build", "setuptools (>=61.2)", "setuptools_scm[toml] (>=6.0)", "twine"]
-testing = ["PyYAML", "atheris (>=2.3.0,<2.4.0) ; python_version < \"3.12\"", "bson", "ecdsa", "feedparser", "gmpy2", "numpy", "pandas", "pymongo", "pytest (>=6.0,!=8.1.*)", "pytest-benchmark", "pytest-benchmark[histogram]", "pytest-checkdocs (>=1.2.3)", "pytest-enabler (>=1.0.1)", "pytest-ruff (>=0.2.1)", "scikit-learn", "scipy (>=1.9.3) ; python_version > \"3.10\"", "scipy ; python_version <= \"3.10\"", "simplejson", "sqlalchemy", "ujson"]
-
-[[package]]
 name = "jsonpointer"
 version = "3.0.0"
 description = "Identify specific nodes in a JSON document (RFC 6901)"
@@ -3690,23 +3671,6 @@ files = [
 ]
 
 [[package]]
-name = "pyvis"
-version = "0.3.2"
-description = "A Python network graph visualization library"
-optional = false
-python-versions = ">3.6"
-groups = ["main"]
-files = [
-    {file = "pyvis-0.3.2-py3-none-any.whl", hash = "sha256:5720c4ca8161dc5d9ab352015723abb7a8bb8fb443edeb07f7a322db34a97555"},
-]
-
-[package.dependencies]
-ipython = ">=5.3.0"
-jinja2 = ">=2.9.6"
-jsonpickle = ">=1.4.1"
-networkx = ">=1.11"
-
-[[package]]
 name = "pywin32"
 version = "311"
 description = "Python for Window Extensions"
@@ -4369,6 +4333,24 @@ granian = ["granian (>=2.3.1)"]
 uvicorn = ["uvicorn (>=0.34.0)"]
 
 [[package]]
+name = "st-link-analysis"
+version = "0.4.0"
+description = "A streamlit custom component for visualizing and interacting with graphs"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "st_link_analysis-0.4.0-py3-none-any.whl", hash = "sha256:7c97ee255a98a9f59fd5814879c9f0e698718dc4ba8dd879b3537b8bcc61b94e"},
+    {file = "st_link_analysis-0.4.0.tar.gz", hash = "sha256:e831aba88e0e4ce7fa90e51e199ff7d563690c260ab18c8c0d488fc942274556"},
+]
+
+[package.dependencies]
+streamlit = ">=0.63"
+
+[package.extras]
+dev = ["mypy", "pytest", "pytest-playwright", "pytest-rerunfailures", "ruff"]
+
+[[package]]
 name = "stack-data"
 version = "0.6.3"
 description = "Extract data from python stack frames and tracebacks for informative displays"
@@ -4850,4 +4832,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4.0"
-content-hash = "62075ec920bbc4d915a3b8c774185ed027e15b416cf62fe2e0ae80d5b5bb182d"
+content-hash = "65b84ead5b509f3e882c381aef3f6624e15bd72be5fdf5dd6b1d62d42f77bc5a"

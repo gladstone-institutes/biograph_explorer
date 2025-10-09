@@ -5,15 +5,14 @@ Provides:
 - Query status and progress tracking
 - Results overview dashboard
 - Convergent nodes table view
-- PyVis network visualization
+- Cytoscape.js network visualization via st-link-analysis
 - RAG chat interface (Phase 3)
 
-Phase 2 Status: Stubs created, Streamlit integration pending
+Phase 2 Status: Implemented with st-link-analysis component
 """
 
 from .network_viz import (
     render_network_visualization,
-    export_visualization_html,
     sample_graph_for_visualization,
     get_node_details,
     create_clustered_graph,
@@ -30,7 +29,6 @@ from .network_viz import (
 
 __all__ = [
     "render_network_visualization",
-    "export_visualization_html",
     "sample_graph_for_visualization",
     "get_node_details",
     "create_clustered_graph",

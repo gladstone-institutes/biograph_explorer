@@ -314,9 +314,14 @@ class TRAPIClient:
         # Step 6: Convert results to edges list with provenance
         edges = []
         edge_sources = {}  # Track which API provided each edge
+        query_result_id = 0  # Assign unique ID to each query result
 
         for k, v in query_results.items():
             if isinstance(v, dict):
+                # Assign sequential query_result_id to this result
+                v['query_result_id'] = query_result_id
+                query_result_id += 1
+
                 # Extract edge key (subject-predicate-object)
                 edge_key = f"{v.get('subject', '')}_{v.get('predicate', '')}_{v.get('object', '')}"
 
@@ -394,3 +399,40 @@ class TRAPIClient:
             return TRAPIResponse(**data)
         except Exception:
             return None
+
+    def list_cached_queries(self) -> List[Dict[str, Any]]:
+        """List all cached query files with metadata.
+
+        Returns:
+            List of dicts with cache file info (path, size, timestamp, etc.)
+        """
+        if not self.cache_dir.exists():
+            return []
+
+        cache_files = sorted(
+            self.cache_dir.glob("tct_results_*.json"),
+            key=lambda x: x.stat().st_mtime,
+            reverse=True
+        )
+
+        results = []
+        for f in cache_files:
+            size_mb = f.stat().st_size / (1024 * 1024)
+            timestamp_str = f.stem.replace("tct_results_", "")
+
+            try:
+                timestamp = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+                date_str = timestamp.strftime("%b %d, %Y %I:%M %p")
+            except ValueError:
+                date_str = timestamp_str
+                timestamp = None
+
+            results.append({
+                "path": f,
+                "size_mb": size_mb,
+                "timestamp": timestamp,
+                "timestamp_str": timestamp_str,
+                "label": f"{date_str} ({size_mb:.1f} MB)"
+            })
+
+        return results

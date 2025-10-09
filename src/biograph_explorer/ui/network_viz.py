@@ -1,29 +1,29 @@
-"""PyVis network visualization for Streamlit UI.
+"""Network visualization using st-link-analysis component.
 
 Features:
-- Interactive PyVis graph rendering
-- Physics-based layouts (forceAtlas2, barnesHut)
+- Interactive Cytoscape.js graph rendering
+- Multiple layout algorithms (cose, fcose, circle, grid, etc.)
 - Node sizing by centrality or gene frequency
-- Node coloring by category
-- Hover tooltips with node properties
-- Clickable nodes showing source/provenance details
-- Export to standalone HTML
+- Node coloring and icons by category
+- Edge styling with predicates
+- Material Icons for node types
+- Built-in fullscreen and JSON export
 
-Phase 2 Status: Implemented
+Phase 2 Status: Implemented with st-link-analysis
 """
 
 from typing import Optional, List, Dict, Any, Tuple
-import streamlit as st
-import streamlit.components.v1 as components
 import networkx as nx
+from networkx.readwrite import json_graph
 from pathlib import Path
 import logging
+import base64
 
 try:
-    from pyvis.network import Network
-    PYVIS_AVAILABLE = True
+    from st_link_analysis import NodeStyle, EdgeStyle
+    ST_LINK_ANALYSIS_AVAILABLE = True
 except ImportError:
-    PYVIS_AVAILABLE = False
+    ST_LINK_ANALYSIS_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -38,115 +38,63 @@ CATEGORY_COLORS = {
     "Other": "#3498DB",  # Blue
 }
 
-# Shape scheme for node categories
-CATEGORY_SHAPES = {
-    "Gene": "box",  # Rectangle
-    "Disease": "diamond",
-    "Protein": "ellipse",
-    "ChemicalEntity": "ellipse",
-    "BiologicalProcess": "ellipse",
-    "Cluster": "hexagon",  # Hexagon for clusters
-    "Other": "dot",
+# Get the absolute path to the assets directory
+_ASSETS_DIR = Path(__file__).parent.parent / "assets"
+
+
+def _svg_to_data_uri(svg_path: Path) -> str:
+    """Convert SVG file to data URI for embedding in browser.
+
+    Args:
+        svg_path: Path to SVG file
+
+    Returns:
+        Data URI string (e.g., "url('data:image/svg+xml;base64,...')")
+    """
+    try:
+        with open(svg_path, 'rb') as f:
+            svg_data = f.read()
+        encoded = base64.b64encode(svg_data).decode('utf-8')
+        return f"url('data:image/svg+xml;base64,{encoded}')"
+    except Exception as e:
+        logger.warning(f"Failed to load SVG icon {svg_path}: {e}")
+        return None
+
+
+# SVG icons for node categories (converted to data URIs)
+CATEGORY_ICONS = {
+    "Gene": _svg_to_data_uri(_ASSETS_DIR / "genetics.svg"),
+    "Disease": _svg_to_data_uri(_ASSETS_DIR / "sick.svg"),
+    "ChemicalEntity": _svg_to_data_uri(_ASSETS_DIR / "experiment.svg"),
+    "Protein": None,
+    "BiologicalProcess": None,
+    "Cluster": None,
+    "Other": None,
 }
 
 
-def render_network_visualization(
+def prepare_cytoscape_elements(
     graph: nx.DiGraph,
     query_genes: List[str],
     sizing_metric: str = "gene_frequency",
-    highlight_nodes: Optional[List[str]] = None,
-    max_nodes: int = 200,
-    height: str = "750px",
-    freeze_layout: bool = True,
-) -> Optional[str]:
-    """Render interactive PyVis network visualization.
+) -> Dict[str, List[Dict]]:
+    """Convert NetworkX graph to Cytoscape.js elements format.
+
+    Uses nx.cytoscape_data() as base, then enriches with custom attributes.
 
     Args:
-        graph: NetworkX DiGraph to visualize
-        query_genes: List of query gene node IDs (highlighted)
-        sizing_metric: Node sizing metric (gene_frequency, pagerank, betweenness, degree)
-        highlight_nodes: Optional list of node IDs to highlight (for citations)
-        max_nodes: Maximum nodes to display (warn if exceeded)
-        height: Height of visualization in CSS units
-        freeze_layout: If True, disable physics after stabilization
+        graph: NetworkX DiGraph to convert
+        query_genes: List of query gene node IDs (for highlighting)
+        sizing_metric: Metric for node sizing (gene_frequency, pagerank, betweenness, degree)
 
     Returns:
-        HTML string of PyVis graph, or None if error
-
-    Example:
-        >>> html = render_network_visualization(graph, ["NCBIGene:1803"])
-        >>> components.html(html, height=750)
+        Dictionary with "nodes" and "edges" lists in Cytoscape.js format
     """
-    if not PYVIS_AVAILABLE:
-        logger.error("PyVis not installed")
-        return None
+    # Get base Cytoscape format from NetworkX
+    cyto_data = json_graph.cytoscape_data(graph)
+    elements = cyto_data["elements"]
 
-    if graph.number_of_nodes() == 0:
-        logger.warning("Empty graph - nothing to visualize")
-        return None
-
-    try:
-        # Sample graph if too large
-        if graph.number_of_nodes() > max_nodes:
-            logger.info(f"Graph has {graph.number_of_nodes()} nodes - sampling to {max_nodes}")
-            graph = sample_graph_for_visualization(graph, query_genes, max_edges=max_nodes)
-
-        # Create PyVis network
-        net = create_pyvis_graph(
-            graph,
-            query_genes,
-            sizing_metric=sizing_metric,
-            highlight_nodes=highlight_nodes or [],
-        )
-
-        # Configure physics
-        configure_physics(net, graph.number_of_nodes(), freeze_after_stabilization=freeze_layout)
-
-        # Generate HTML
-        html = net.generate_html()
-
-        return html
-
-    except Exception as e:
-        logger.error(f"Error creating visualization: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
-
-
-def create_pyvis_graph(
-    graph: nx.DiGraph,
-    query_genes: List[str],
-    sizing_metric: str = "gene_frequency",
-    highlight_nodes: Optional[List[str]] = None,
-) -> "Network":
-    """Create PyVis Network from NetworkX graph.
-
-    Args:
-        graph: NetworkX DiGraph
-        query_genes: Query gene node IDs
-        sizing_metric: Metric for node sizing
-        highlight_nodes: Nodes to highlight
-
-    Returns:
-        PyVis Network object
-    """
-    if not PYVIS_AVAILABLE:
-        raise ImportError("PyVis not installed. Run: pip install pyvis")
-
-    highlight_nodes = highlight_nodes or []
-
-    # Create PyVis network
-    net = Network(
-        height="750px",
-        width="100%",
-        directed=True,
-        notebook=False,
-        bgcolor="#0E1117",  # Match Streamlit dark theme
-        font_color="#FAFAFA",
-    )
-
-    # Normalize sizing metric values for consistent node sizes
+    # Calculate metric values for sizing
     metric_values = {}
     if sizing_metric in ["pagerank", "betweenness", "degree"]:
         for node in graph.nodes():
@@ -165,351 +113,416 @@ def create_pyvis_graph(
     else:
         normalized_metrics = {node: 0.5 for node in graph.nodes()}
 
-    # Add nodes with styling
-    for node in graph.nodes():
-        node_attrs = graph.nodes[node]
-        is_query_gene = node_attrs.get("is_query_gene", False)
-        is_highlighted = node in highlight_nodes
+    # Enrich nodes with custom attributes
+    for node_element in elements["nodes"]:
+        node_id = node_element["data"]["id"]
+        node_attrs = graph.nodes[node_id]
+
+        # Add category as label (for NodeStyle matching)
         category = node_attrs.get("category", "Other")
+        node_element["data"]["label"] = category  # Used by NodeStyle for matching
 
-        # Get style properties
-        style = style_node(node, graph, is_query_gene, is_highlighted, normalized_metrics[node], category)
-
-        # Create tooltip
-        tooltip = create_node_tooltip(node, graph)
-
-        # Use original symbol for query genes, otherwise use label
+        # Add display name (for caption)
         original_symbol = node_attrs.get("original_symbol", "")
-        display_label = original_symbol if original_symbol else node_attrs.get("label", node)
+        display_label = node_attrs.get("label", node_id)
+        node_element["data"]["name"] = original_symbol if original_symbol else display_label
 
-        # Add node to PyVis network
-        net.add_node(
-            node,
-            label=display_label,
-            title=tooltip,
-            color=style["color"],
-            size=style["size"],
-            shape=style["shape"],
-            borderWidth=style["borderWidth"],
-            borderWidthSelected=style["borderWidthSelected"],
-        )
+        # Add query gene flag
+        is_query_gene = node_attrs.get("is_query_gene", False)
+        node_element["data"]["is_query_gene"] = is_query_gene
 
-    # Add edges
-    for source, target, edge_attrs in graph.edges(data=True):
-        predicate = edge_attrs.get("predicate", "")
-        predicate_label = predicate.replace("biolink:", "")
+        # Calculate node size (15-45px range from PROJECT_PLAN.md)
+        base_size = 15 + (normalized_metrics.get(node_id, 0.5) * 30)
 
-        net.add_edge(
-            source,
-            target,
-            title=predicate_label,
-            label=predicate_label if len(predicate_label) < 30 else "",
-            color="#666666",
-            width=1.5,
-            arrows="to",
-        )
+        # Query genes get larger minimum size
+        if is_query_gene:
+            base_size = max(base_size, 25)
 
-    return net
+        node_element["data"]["size"] = base_size
 
+        # Add metrics for tooltip/inspection
+        node_element["data"]["gene_frequency"] = node_attrs.get("gene_frequency", 0)
+        node_element["data"]["pagerank"] = node_attrs.get("pagerank", 0)
+        node_element["data"]["betweenness"] = node_attrs.get("betweenness", 0)
+        node_element["data"]["degree"] = graph.degree(node_id)
 
-def configure_physics(net: "Network", num_nodes: int, freeze_after_stabilization: bool = True) -> None:
-    """Configure physics settings based on graph size.
+    # Enrich edges with custom attributes
+    for idx, edge_element in enumerate(elements["edges"]):
+        source = edge_element["data"]["source"]
+        target = edge_element["data"]["target"]
 
-    Args:
-        net: PyVis Network object
-        num_nodes: Number of nodes in graph
-        freeze_after_stabilization: If True, disable physics after layout stabilizes
-    """
-    import json
+        # Add unique ID for st-link-analysis (REQUIRED)
+        edge_element["data"]["id"] = f"e{idx}"
 
-    # Stabilize with physics, then optionally freeze to prevent excessive movement
-    physics_enabled = not freeze_after_stabilization
+        # Get edge data from graph
+        if graph.has_edge(source, target):
+            edge_attrs = graph[source][target]
 
-    physics_config = {
-        "physics": {
-            "enabled": physics_enabled,
-            "forceAtlas2Based": {
-                "gravitationalConstant": -50,
-                "centralGravity": 0.01,
-                "springLength": 150,  # Increased from 100
-                "springConstant": 0.05,  # Reduced from 0.08
-                "damping": 0.9,  # Increased from 0.4 for stability
-                "avoidOverlap": 1.0,  # Increased from 0.5
-            },
-            "maxVelocity": 30,  # Reduced from 50
-            "solver": "forceAtlas2Based",
-            "stabilization": {
-                "enabled": True,
-                "iterations": 200,  # Increased from 150
-                "updateInterval": 25,
-                "fit": True,
-            },
-            "adaptiveTimestep": True,
-        },
-        "interaction": {
-            "dragNodes": True,
-            "dragView": True,
-            "zoomView": True,
-            "hover": True,
-        },
-    }
+            # Add predicate (cleaned)
+            predicate = edge_attrs.get("predicate", "")
+            edge_element["data"]["label"] = predicate.replace("biolink:", "")
 
-    net.set_options(json.dumps(physics_config))
+            # Add knowledge sources
+            sources = edge_attrs.get("knowledge_source", [])
+            edge_element["data"]["knowledge_sources"] = sources
+
+    return {"nodes": elements["nodes"], "edges": elements["edges"]}
 
 
-def style_node(
-    node_id: str,
-    graph: nx.DiGraph,
-    is_query_gene: bool,
-    is_highlighted: bool,
-    metric_normalized: float,
-    category: str,
-) -> Dict[str, Any]:
-    """Generate PyVis styling for a node.
+def create_node_styles(graph: nx.DiGraph) -> List["NodeStyle"]:
+    """Create NodeStyle objects for each category in the graph.
 
     Args:
-        node_id: Node identifier
-        graph: NetworkX graph containing node
-        is_query_gene: Whether this is a query gene
-        is_highlighted: Whether to highlight (for citations)
-        metric_normalized: Normalized metric value (0-1)
-        category: Node category (Gene, Disease, etc.)
+        graph: NetworkX graph containing nodes with "category" attribute
 
     Returns:
-        Dictionary with PyVis node properties (color, size, shape, etc.)
+        List of NodeStyle objects, one per unique category
     """
-    # Base size: 15-45px based on metric (from PROJECT_PLAN.md)
-    size = 15 + (metric_normalized * 30)
+    if not ST_LINK_ANALYSIS_AVAILABLE:
+        raise ImportError("st-link-analysis not installed. Run: pip install st-link-analysis")
 
-    # Query genes get larger minimum size
-    if is_query_gene:
-        size = max(size, 25)
+    # Extract unique categories
+    categories = set()
+    for node in graph.nodes():
+        category = graph.nodes[node].get("category", "Other")
+        categories.add(category)
 
-    # Highlighted nodes get even larger
-    if is_highlighted:
-        size = size * 1.3
+    # Create NodeStyle for each category
+    node_styles = []
+    for category in sorted(categories):
+        color = CATEGORY_COLORS.get(category, CATEGORY_COLORS["Other"])
+        icon = CATEGORY_ICONS.get(category)
 
-    # Color by category
-    color = CATEGORY_COLORS.get(category, CATEGORY_COLORS["Other"])
+        # Use "name" as caption (displays gene symbol or node label)
+        # Only include icon parameter if icon is not None
+        if icon:
+            node_styles.append(
+                NodeStyle(
+                    label=category,
+                    color=color,
+                    caption="name",
+                    icon=icon
+                )
+            )
+        else:
+            node_styles.append(
+                NodeStyle(
+                    label=category,
+                    color=color,
+                    caption="name"
+                )
+            )
 
-    # Query genes get brighter color
-    if is_query_gene:
-        color = CATEGORY_COLORS.get(category, "#E74C3C")  # Ensure query genes are visible
-
-    # Shape by category
-    shape = CATEGORY_SHAPES.get(category, "dot")
-
-    # Border width
-    borderWidth = 4 if is_query_gene else 2
-    borderWidthSelected = 6 if is_query_gene else 4
-
-    return {
-        "color": color,
-        "size": size,
-        "shape": shape,
-        "borderWidth": borderWidth,
-        "borderWidthSelected": borderWidthSelected,
-    }
+    return node_styles
 
 
-def create_node_tooltip(node_id: str, graph: nx.DiGraph) -> str:
-    """Create plain text tooltip for node hover.
-
-    PyVis doesn't render HTML in tooltips properly, so we use plain text.
+def create_edge_styles(graph: nx.DiGraph) -> List["EdgeStyle"]:
+    """Create EdgeStyle objects for each predicate in the graph.
 
     Args:
-        node_id: Node identifier
-        graph: NetworkX graph containing node
+        graph: NetworkX graph containing edges with "predicate" attribute
 
     Returns:
-        Plain text string for tooltip
+        List of EdgeStyle objects, one per unique predicate
     """
-    attrs = graph.nodes[node_id]
+    if not ST_LINK_ANALYSIS_AVAILABLE:
+        raise ImportError("st-link-analysis not installed. Run: pip install st-link-analysis")
 
-    # Extract attributes
-    label = attrs.get("label", node_id)
-    original_symbol = attrs.get("original_symbol", "")
-    category = attrs.get("category", "Unknown")
-    is_query = attrs.get("is_query_gene", False)
+    # Extract unique predicates
+    predicates = set()
+    for _, _, edge_attrs in graph.edges(data=True):
+        predicate = edge_attrs.get("predicate", "").replace("biolink:", "")
+        if predicate:
+            predicates.add(predicate)
 
-    # Check if this is a cluster meta-node
-    if category == "Cluster":
-        # Special tooltip for cluster nodes
-        size = attrs.get("size", 0)
-        density = attrs.get("density", 0)
-        query_gene_count = attrs.get("query_gene_count", 0)
-        top_nodes = attrs.get("top_nodes", [])
+    # Create EdgeStyle for each predicate
+    edge_styles = []
+    for predicate in sorted(predicates):
+        edge_styles.append(
+            EdgeStyle(
+                label=predicate,     # Matches edge data["label"]
+                caption="label",     # Display the label attribute
+                directed=True        # Show arrows
+            )
+        )
 
-        lines = [
-            label,
-            "━" * 30,
-            f"Type: Community Cluster",
-            f"Size: {size} nodes",
-            f"Density: {density:.3f}",
-            f"Query Genes: {query_gene_count}",
-        ]
+    # If no predicates found, add a default style
+    if not edge_styles:
+        edge_styles.append(
+            EdgeStyle(
+                label="default",     # Default label
+                caption="label",     # Display the label attribute
+                directed=True        # Show arrows
+            )
+        )
 
-        if top_nodes:
-            lines.append("━" * 30)
-            lines.append("Top Nodes:")
-            for node_label in top_nodes[:3]:
-                if node_label:
-                    lines.append(f"  • {node_label[:30]}")
-
-        return "\n".join(lines)
-    else:
-        # Regular node tooltip
-        gene_freq = attrs.get("gene_frequency", 0)
-        pagerank = attrs.get("pagerank", 0)
-        betweenness = attrs.get("betweenness", 0)
-        degree = graph.degree(node_id)
-
-        # Build plain text tooltip
-        lines = [
-            label if not original_symbol else f"{original_symbol} ({label})",
-            "━" * 30,
-            f"ID: {node_id}",
-            f"Category: {category}",
-        ]
-
-        if is_query:
-            lines.append("✓ Query Gene")
-
-        lines.extend([
-            "━" * 30,
-            f"Gene Frequency: {gene_freq}",
-            f"PageRank: {pagerank:.4f}",
-            f"Betweenness: {betweenness:.1f}",
-            f"Degree: {degree}",
-            "━" * 30,
-            "Click node for detailed info",
-        ])
-
-        return "\n".join(lines)
+    return edge_styles
 
 
-def export_visualization_html(
+def get_layout_config(layout_name: str = "dagre") -> Dict[str, Any]:
+    """Get layout configuration for Cytoscape.js.
+
+    Args:
+        layout_name: Name of layout algorithm (dagre, fcose, cola, cose-bilkent, breadthfirst, cose, circle, grid, concentric)
+
+    Returns:
+        Layout configuration dictionary
+    """
+    # Default configuration based on demos
+    layout = {
+        "name": layout_name,
+        "animate": "end",
+        "nodeDimensionsIncludeLabels": False
+    }
+
+    # Add layout-specific options
+    if layout_name == "dagre":
+        layout.update({
+            "rankDir": "TB",  # Top to bottom (genes → intermediates → disease)
+            "ranker": "network-simplex",  # Optimal ranking algorithm
+            "nodeSep": 50,  # Separation between nodes on same rank
+            "edgeSep": 10,  # Separation between edges
+            "rankSep": 75,  # Separation between ranks (levels)
+            "fit": True,
+            "padding": 30
+        })
+    elif layout_name == "cose":
+        layout.update({
+            "nodeRepulsion": 400000,
+            "idealEdgeLength": 100,
+            "edgeElasticity": 100,
+            "nestingFactor": 5,
+            "gravity": 80,
+            "numIter": 1000,
+            "initialTemp": 200,
+            "coolingFactor": 0.95,
+            "minTemp": 1.0
+        })
+    elif layout_name == "fcose":
+        layout.update({
+            "quality": "default",
+            "randomize": True,
+            "animate": "end",
+            "fit": True,
+            "padding": 30,
+            "nodeSeparation": 75,
+            "idealEdgeLength": 50,
+            "edgeElasticity": 0.45,
+            "nestingFactor": 0.1,
+            "gravity": 0.25,
+            "numIter": 2500,
+            "tile": True,
+            "tilingPaddingVertical": 10,
+            "tilingPaddingHorizontal": 10,
+            "gravityRangeCompound": 1.5,
+            "gravityCompound": 1.0,
+            "gravityRange": 3.8
+        })
+    elif layout_name == "cola":
+        layout.update({
+            "animate": True,
+            "refresh": 1,
+            "maxSimulationTime": 4000,
+            "ungrabifyWhileSimulating": False,
+            "fit": True,
+            "padding": 30,
+            "nodeDimensionsIncludeLabels": False,
+            "randomize": False,
+            "avoidOverlap": True,
+            "handleDisconnected": True,
+            "convergenceThreshold": 0.01,
+            "nodeSpacing": 10,
+            "flow": None,
+            "alignment": None,
+            "gapInequalities": None
+        })
+    elif layout_name == "cose-bilkent":
+        layout.update({
+            "quality": "default",
+            "nodeDimensionsIncludeLabels": False,
+            "refresh": 30,
+            "fit": True,
+            "padding": 30,
+            "randomize": True,
+            "nodeRepulsion": 4500,
+            "idealEdgeLength": 50,
+            "edgeElasticity": 0.45,
+            "nestingFactor": 0.1,
+            "gravity": 0.25,
+            "numIter": 2500,
+            "tile": True,
+            "tilingPaddingVertical": 10,
+            "tilingPaddingHorizontal": 10,
+            "gravityRangeCompound": 1.5,
+            "gravityCompound": 1.0,
+            "gravityRange": 3.8,
+            "initialEnergyOnIncremental": 0.5
+        })
+
+    return layout
+
+
+def render_network_visualization(
     graph: nx.DiGraph,
     query_genes: List[str],
-    output_path: Path,
-) -> Path:
-    """Export standalone HTML visualization.
+    sizing_metric: str = "gene_frequency",
+    layout: str = "dagre",
+    max_intermediates: int = 200,
+    highlight_nodes: Optional[List[str]] = None,
+    disease_curie: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Prepare network visualization data for st-link-analysis component.
 
     Args:
-        graph: NetworkX graph to visualize
-        query_genes: Query gene node IDs
-        output_path: Output file path
+        graph: NetworkX DiGraph to visualize
+        query_genes: List of query gene node IDs (highlighted)
+        sizing_metric: Node sizing metric (gene_frequency, pagerank, betweenness, degree)
+        layout: Layout algorithm name (cose, fcose, circle, grid, breadthfirst, concentric)
+        max_intermediates: Maximum intermediate nodes to display (default: 200)
+        highlight_nodes: Optional list of node IDs to highlight (for citations)
+        disease_curie: Optional disease CURIE (always included if present)
 
     Returns:
-        Path to exported HTML file
-    """
-    html = render_network_visualization(graph, query_genes)
+        Dictionary with elements, node_styles, edge_styles, and layout config
 
-    if html:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(html)
-        logger.info(f"Exported visualization to {output_path}")
-        return output_path
-    else:
-        raise ValueError("Failed to generate visualization HTML")
+    Example:
+        >>> viz_data = render_network_visualization(graph, ["NCBIGene:1803"], max_intermediates=200)
+        >>> st_link_analysis(viz_data["elements"], viz_data["layout"],
+        ...                  viz_data["node_styles"], viz_data["edge_styles"])
+    """
+    if not ST_LINK_ANALYSIS_AVAILABLE:
+        logger.error("st-link-analysis not installed")
+        return None
+
+    if graph.number_of_nodes() == 0:
+        logger.warning("Empty graph - nothing to visualize")
+        return None
+
+    try:
+        # Sample graph by top intermediates
+        graph = sample_graph_for_visualization(
+            graph,
+            query_genes,
+            max_intermediates=max_intermediates,
+            disease_curie=disease_curie
+        )
+
+        # Prepare Cytoscape elements
+        elements = prepare_cytoscape_elements(graph, query_genes, sizing_metric)
+
+        # Create node and edge styles
+        node_styles = create_node_styles(graph)
+        edge_styles = create_edge_styles(graph)
+
+        # Get layout configuration
+        layout_config = get_layout_config(layout)
+
+        return {
+            "elements": elements,
+            "node_styles": node_styles,
+            "edge_styles": edge_styles,
+            "layout": layout_config
+        }
+
+    except Exception as e:
+        logger.error(f"Error creating visualization: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 
 def sample_graph_for_visualization(
     graph: nx.DiGraph,
     query_genes: List[str],
-    max_edges: int = 50,
+    max_intermediates: int = 200,
+    disease_curie: Optional[str] = None,
 ) -> nx.DiGraph:
-    """Sample graph edges for visualization while preserving query genes.
+    """Sample graph by filtering top intermediate nodes ranked by query gene connectivity.
 
-    Uses strategy from notebook cell 14:
-    - Guarantee ≥2 edges per query gene
-    - Fill remaining budget with high-degree edges
+    Sampling strategy:
+    1. Always include ALL query genes
+    2. Identify intermediate nodes (non-query genes)
+    3. Score intermediates by number of edges connecting to query genes
+    4. Keep top-N intermediates based on max_intermediates parameter
+    5. Include disease node if present
+    6. Build subgraph with selected nodes + their edges
 
     Args:
         graph: Full NetworkX graph
-        query_genes: Query gene node IDs
-        max_edges: Maximum edges to include
+        query_genes: Query gene node IDs (always included)
+        max_intermediates: Maximum number of intermediate nodes to include (default: 200)
+        disease_curie: Optional disease CURIE (always included if present)
 
     Returns:
-        Sampled subgraph
+        Sampled subgraph with query genes + top intermediates by connectivity
     """
-    if graph.number_of_edges() <= max_edges:
+    # Identify query genes present in graph
+    genes_in_graph = set(g for g in query_genes if g in graph.nodes())
+
+    if not genes_in_graph:
+        logger.warning("No query genes found in graph")
         return graph
 
-    logger.info(f"Sampling graph: {graph.number_of_edges()} edges → {max_edges} edges")
+    logger.info(f"Found {len(genes_in_graph)} query genes in graph")
 
-    # Get node degrees for prioritization
-    degrees = dict(graph.degree())
+    # Identify intermediate nodes (exclude query genes and disease)
+    intermediate_nodes = []
+    for node in graph.nodes():
+        if node not in genes_in_graph and node != disease_curie:
+            intermediate_nodes.append(node)
 
-    # STEP 1: Guarantee edges for each query gene
-    required_edges = []
-    genes_in_graph = [g for g in query_genes if g in graph.nodes()]
+    total_intermediates = len(intermediate_nodes)
+    logger.info(f"Found {total_intermediates} intermediate nodes")
 
-    logger.info(f"Found {len(genes_in_graph)}/{len(query_genes)} query genes in graph")
+    # If we have fewer intermediates than the limit, return full graph
+    if total_intermediates <= max_intermediates:
+        logger.info(f"Total intermediates ({total_intermediates}) <= max ({max_intermediates}) - returning full graph")
+        return graph
 
-    for gene in genes_in_graph:
-        # Get all edges involving this gene
-        gene_edges = list(graph.in_edges(gene, data=True)) + list(graph.out_edges(gene, data=True))
+    logger.info(f"Sampling intermediates: {total_intermediates} → {max_intermediates}")
 
-        if gene_edges:
-            # Score edges by neighbor degree (prefer high-connectivity neighbors)
-            scored_edges = []
-            for src, tgt, data in gene_edges:
-                neighbor = tgt if src == gene else src
-                score = degrees.get(neighbor, 0)
-                scored_edges.append((score, (src, tgt, data)))
+    # Score each intermediate by connections to query genes
+    intermediate_scores = {}
+    for node in intermediate_nodes:
+        # Count edges to/from query genes
+        score = 0
+        for gene in genes_in_graph:
+            if graph.has_edge(gene, node):
+                score += 1
+            if graph.has_edge(node, gene):
+                score += 1
 
-            # Take top 2 edges for this gene
-            scored_edges.sort(reverse=True, key=lambda x: x[0])
-            required_edges.extend([edge for _, edge in scored_edges[:min(2, len(scored_edges))]])
+        intermediate_scores[node] = score
 
-    logger.info(f"Selected {len(required_edges)} edges covering query genes")
-
-    # STEP 2: Fill remaining budget with high-degree edges
-    remaining_budget = max_edges - len(required_edges)
-
-    if remaining_budget > 0:
-        # Get all other edges
-        required_edge_set = set((src, tgt) for src, tgt, _ in required_edges)
-        other_edges = [
-            (src, tgt, data)
-            for src, tgt, data in graph.edges(data=True)
-            if (src, tgt) not in required_edge_set
-        ]
-
-        # Score edges by total endpoint degree
-        scored_other = [
-            (degrees.get(src, 0) + degrees.get(tgt, 0), (src, tgt, data))
-            for src, tgt, data in other_edges
-        ]
-        scored_other.sort(reverse=True, key=lambda x: x[0])
-
-        # Add top edges to fill budget
-        additional_edges = [edge for _, edge in scored_other[:remaining_budget]]
-        sampled_edges = required_edges + additional_edges
-    else:
-        sampled_edges = required_edges[:max_edges]
-
-    # Build sampled subgraph
-    sampled_graph = nx.DiGraph()
-
-    for src, tgt, data in sampled_edges:
-        # Copy edge with all attributes
-        sampled_graph.add_edge(src, tgt, **data)
-
-    # Copy node attributes
-    for node in sampled_graph.nodes():
-        if node in graph.nodes():
-            sampled_graph.nodes[node].update(graph.nodes[node])
+    # Sort intermediates by score (descending) and take top-N
+    top_intermediates = sorted(
+        intermediate_scores.items(),
+        key=lambda x: x[1],
+        reverse=True
+    )[:max_intermediates]
 
     logger.info(
-        f"Sampled graph: {sampled_graph.number_of_nodes()} nodes, {sampled_graph.number_of_edges()} edges"
+        f"Top intermediate scores - max: {top_intermediates[0][1] if top_intermediates else 0}, "
+        f"min: {top_intermediates[-1][1] if top_intermediates else 0}"
     )
 
-    # Verify query gene coverage
-    genes_in_sample = sum(1 for g in genes_in_graph if g in sampled_graph.nodes())
-    logger.info(f"Query genes in sample: {genes_in_sample}/{len(genes_in_graph)}")
+    # Build set of nodes to include
+    nodes_to_include = set(genes_in_graph)  # Always include query genes
+    nodes_to_include.update(node for node, _ in top_intermediates)  # Add top intermediates
+
+    # Always include disease if present
+    if disease_curie and disease_curie in graph.nodes():
+        nodes_to_include.add(disease_curie)
+        logger.info(f"Including disease node: {disease_curie}")
+
+    # Create subgraph with selected nodes
+    sampled_graph = graph.subgraph(nodes_to_include).copy()
+
+    logger.info(
+        f"Sampled graph: {sampled_graph.number_of_nodes()} nodes, "
+        f"{sampled_graph.number_of_edges()} edges "
+        f"(query genes: {len(genes_in_graph)}, intermediates: {len(top_intermediates)})"
+    )
 
     return sampled_graph
 
@@ -647,6 +660,7 @@ def create_clustered_graph(
         meta_graph.add_edge(
             f"cluster_{comm1}",
             f"cluster_{comm2}",
+            predicate=f"{count} edges",
             weight=count,
             label=f"{count} edges",
         )
