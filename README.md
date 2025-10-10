@@ -6,7 +6,23 @@ Streamlit application for exploring biomedical knowledge graphs through multi-ge
 
 ## Overview
 
-BioGraph Explorer queries the NCATS Translator knowledge graph system to find connections between genes and diseases, then identifies convergent pathways and potential therapeutic targets using network analysis.
+BioGraph Explorer is a research tool for exploring different approaches to high-dimensional biomedical queries using the NCATS Translator knowledge graph system:
+
+1. **TRAPI Query Execution**: Executes multi-gene pathfinder queries from NCATS Translator APIs using TCT (Translator Component Toolkit)
+2. **Result Augmentation**: Enriches intermediate nodes with additional information from external data sources beyond what Translator returns (not implemented yet)
+3. **Result Distillation**: Applies clustering and other methods to identify patterns and reduce complexity
+4. **LLM-Assisted Exploration**: Uses AI summarization and natural language Q&A to extract insights from augmented query results (not implemented yet)
+
+The goal is to discover effective workflows for transforming complex high dimensional Translator queries into interpretable biological insights for results from transcriptomics experiments.
+
+## Key Technologies
+
+- **[TCT (Translator Component Toolkit)](https://github.com/gloriachin/Translator_component_toolkit)**: TRAPI query library
+- **[NetworkX](https://networkx.org/)**: Graph analysis
+- **[python-louvain](https://github.com/taynaud/python-louvain)**: Community detection
+- **[Streamlit](https://streamlit.io/)**: Web UI
+- **[st-link-analysis](https://github.com/AlrasheedA/st-link-analysis)**: Interactive Cytoscape.js visualization
+- **[Pydantic](https://docs.pydantic.dev/)**: Data validation
 
 **Current Features (Phase 1 and 2):**
 - ✅ Gene normalization using NCATS Translator
@@ -15,14 +31,20 @@ BioGraph Explorer queries the NCATS Translator knowledge graph system to find co
 - ✅ Louvain community detection & centrality analysis
 - ✅ Interactive Cytoscape.js visualization with 9 layout algorithms
 - ✅ CSV import and example datasets (Alzheimer's, COVID-19)
-- ✅ Query caching for performance
+- ✅ Query caching for development
 
 **Planned Features (Phase 3):**
+- 📋 Node resizing in network view - currently broken
+- 📋 Better clustering algorithms - current louvain clustering is not ideal for a highly constrained network (only 1 disease node)
+- 📋 Filter results by predicate types
+- 📋 Session management (explicitly save/load sessions, currently just cached in a local directory)
+- 📋 Built in disease curie lookup
+- 📋 Export to Cytoscape button
 - 📋 Improved query builder (3-hop queries, gene -> [intermediate] -> disease associated phenotypes)
-- 📋 Better clustering algorithms suited for each query type
+- 📋 Augmenting the query results with external data sources
 - 📋 LLM cluster summarization
 - 📋 RAG-powered chat interface with Claude AI with knowledge provenance subgraph display
-- 📋 Session management (save/load analysis sessions)
+
 
 > **Note**: This is research software in active development. Some features are incomplete and subject to change.
 
@@ -52,13 +74,16 @@ poetry install
 streamlit run app.py
 ```
 
+![BioGraph Explorer Main Interface](static/images/main_page.png)
+
 
 ### 2. Try an Example Query
 
 1. In the sidebar, select **"Example Dataset"**
-2. Choose **"Alzheimer's Disease (15 genes)"**
-3. Select query pattern: **"1-hop: Gene → Any Connection"** (recommended for first run)
-4. Click **"Run Query"** (takes ~3-5 minutes)
+2. Choose **"COVID-19 (10 genes)"** (default)
+3. Select query pattern
+4. Select intermediate node types
+5. Click **"Run Query"** (takes ~3-5 minutes)
 
 ### 3. Explore Results
 
@@ -70,13 +95,13 @@ The app displays results in three tabs:
 
 ### 4. Try Your Own Genes
 
-Create a CSV with a `gene_symbol` column (see [data/test_genes/alzheimers_genes.csv](data/test_genes/alzheimers_genes.csv) for format) or enter genes manually in the sidebar.
+Create a CSV with a `gene_symbol` column (see [data/test_genes/covid19_genes.csv](data/test_genes/covid19_genes.csv) for format) or enter genes manually in the sidebar.
 
 ## Understanding Your Results
 
 **Query Patterns:**
 - **1-hop** (`Gene → Any`): Finds all connections to your genes (broad discovery)
-- **2-hop** (`Gene → Intermediate → Disease`): Finds therapeutic targets between genes and a disease (requires disease CURIE like `MONDO:0004975`)
+- **2-hop** (`Gene → Intermediate → Disease`): Finds therapeutic targets between genes and a disease (requires disease CURIE like `MONDO:0100096` for COVID-19)
 
 **Key Metrics:**
 - **Gene Frequency**: How many query genes connect to each node (convergence indicator)
@@ -107,14 +132,6 @@ make html
 poetry add <package-name>
 ```
 
-## Key Technologies
-
-- **[TCT (Translator Component Toolkit)](https://github.com/gloriachin/Translator_component_toolkit)**: TRAPI query library
-- **[NetworkX](https://networkx.org/)**: Graph analysis
-- **[python-louvain](https://github.com/taynaud/python-louvain)**: Community detection
-- **[Streamlit](https://streamlit.io/)**: Web UI
-- **[st-link-analysis](https://github.com/AlrasheedA/st-link-analysis)**: Interactive Cytoscape.js visualization
-- **[Pydantic](https://docs.pydantic.dev/)**: Data validation
 
 ## Current Limitations
 
@@ -129,7 +146,7 @@ poetry add <package-name>
 - Try different genes (some have sparse data in Translator)
 
 **"Graph is empty"**
-- Verify disease CURIE format for 2-hop queries (`MONDO:0004975` for Alzheimer's)
+- Verify disease CURIE format for 2-hop queries (`MONDO:0100096` for COVID-19, `MONDO:0004975` for Alzheimer's)
 - Check that genes are valid HUGO symbols (uppercase)
 
 **"Visualization is slow"**

@@ -55,12 +55,12 @@ input_method = st.sidebar.radio(
 )
 
 genes = []
-disease_curie = "MONDO:0004975"  # Default: Alzheimer's
+disease_curie = "MONDO:0100096"  # Default: COVID-19
 
 if input_method == "Example Dataset":
     dataset_choice = st.sidebar.selectbox(
         "Select Example",
-        ["Alzheimer's Disease (15 genes)", "COVID-19 (10 genes)"]
+        ["COVID-19 (10 genes)", "Alzheimer's Disease (15 genes)"]
     )
     
     if dataset_choice == "Alzheimer's Disease (15 genes)":
@@ -194,7 +194,7 @@ else:  # Load Cached Query
 disease_curie = st.sidebar.text_input(
     "Disease CURIE",
     value=disease_curie,
-    help="Optional disease CURIE (e.g., MONDO:0004975 for Alzheimer's)"
+    help="Disease CURIE ID (e.g., MONDO:0004975 for Alzheimer's)"
 )
 
 # Intermediate entity type selector
@@ -291,7 +291,7 @@ if run_query:
         status_text.text("Initializing TRAPI client...")
         progress_bar.progress(10)
         
-        client = TRAPIClient(cache_dir=Path("data/cache"), max_workers=5)
+        client = TRAPIClient(cache_dir=Path("data/cache"), max_workers=4)
         builder = GraphBuilder()
         engine = ClusteringEngine()
 
@@ -476,10 +476,10 @@ if st.session_state.graph:
                     if node not in query_gene_set and node != st.session_state.disease_curie
                 )
                 max_slider_value = max(intermediate_count, 10)  # At least 10
-                default_value = min(200, intermediate_count)  # Default to 200 or total if less
+                default_value = min(20, intermediate_count)  # Default to 200 or total if less
             else:
                 max_slider_value = 500
-                default_value = 200
+                default_value = 20
 
             max_intermediates = st.slider(
                 "Top Intermediates",
@@ -553,7 +553,7 @@ if st.session_state.graph:
 
             st.caption("""
             **:material/lightbulb: How to explore:**
-            - **Drag** to pan • **Scroll** to zoom • **Click** node to select
+            - **Drag** to pan • **Scroll** to zoom • **Click** node or edge to select and view information
             - **Fullscreen** button in top-right • **Export JSON** for external tools
             """)
         else:

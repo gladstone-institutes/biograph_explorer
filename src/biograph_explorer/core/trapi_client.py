@@ -53,7 +53,7 @@ class TRAPIClient:
         self,
         cache_dir: Path = Path("data/cache"),
         timeout: int = 30,
-        max_workers: int = 5,
+        max_workers: int = 4,
     ):
         """Initialize TRAPI client.
 
@@ -308,7 +308,7 @@ class TRAPIClient:
             select_APIs=selected_APIs,
             APInames=self.APInames,
             API_predicates=API_predicates,
-            max_workers=self.max_workers,
+            max_workers=self.max_workers
         )
 
         # Step 6: Convert results to edges list with provenance
