@@ -21,7 +21,7 @@ The goal is to discover effective workflows for transforming complex high dimens
 - **[NetworkX](https://networkx.org/)**: Graph analysis
 - **[python-louvain](https://github.com/taynaud/python-louvain)**: Community detection
 - **[Streamlit](https://streamlit.io/)**: Web UI
-- **[st-link-analysis](https://github.com/AlrasheedA/st-link-analysis)**: Interactive Cytoscape.js visualization
+- **[streamlit-cytoscape](https://github.com/natalie-23-gill/streamlit-cytoscape)**: Interactive Cytoscape.js visualization based on [st-link-analysis](https://github.com/AlrasheedA/st-link-analysis)
 - **[Pydantic](https://docs.pydantic.dev/)**: Data validation
 
 **Current Features (Phase 1 and 2):**

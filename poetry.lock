@@ -4412,24 +4412,6 @@ granian = ["granian (>=2.3.1)"]
 uvicorn = ["uvicorn (>=0.34.0)"]
 
 [[package]]
-name = "st-link-analysis"
-version = "0.4.0"
-description = "A streamlit custom component for visualizing and interacting with graphs"
-optional = false
-python-versions = ">=3.9"
-groups = ["main"]
-files = [
-    {file = "st_link_analysis-0.4.0-py3-none-any.whl", hash = "sha256:7c97ee255a98a9f59fd5814879c9f0e698718dc4ba8dd879b3537b8bcc61b94e"},
-    {file = "st_link_analysis-0.4.0.tar.gz", hash = "sha256:e831aba88e0e4ce7fa90e51e199ff7d563690c260ab18c8c0d488fc942274556"},
-]
-
-[package.dependencies]
-streamlit = ">=0.63"
-
-[package.extras]
-dev = ["mypy", "pytest", "pytest-playwright", "pytest-rerunfailures", "ruff"]
-
-[[package]]
 name = "stack-data"
 version = "0.6.3"
 description = "Extract data from python stack frames and tracebacks for informative displays"
@@ -4507,6 +4489,21 @@ charts = ["graphviz (>=0.19.0)", "matplotlib (>=3.0.0)", "orjson (>=3.5.0)", "pl
 pdf = ["streamlit-pdf (>=1.0.0)"]
 snowflake = ["snowflake-connector-python (>=3.3.0) ; python_version < \"3.12\"", "snowflake-snowpark-python[modin] (>=1.17.0) ; python_version < \"3.12\""]
 sql = ["SQLAlchemy (>=2.0.0)"]
+
+[[package]]
+name = "streamlit-cytoscape"
+version = "0.1.1"
+description = "A flexible, customizable, Streamlit component for interactive graph visualization using Cytoscape.js"
+optional = false
+python-versions = "<4.0,>=3.10"
+groups = ["main"]
+files = [
+    {file = "streamlit_cytoscape-0.1.1-py3-none-any.whl", hash = "sha256:efb2bb3132279cc9f36c64388f6a9883975877e6b1c6c87c40173e472f199e17"},
+    {file = "streamlit_cytoscape-0.1.1.tar.gz", hash = "sha256:bcd9083a853b6de08d61b42d3edc7f333e38a024635075f9b918104f369d5d9e"},
+]
+
+[package.dependencies]
+streamlit = ">=0.63"
 
 [[package]]
 name = "tct"
@@ -4910,4 +4907,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4.0"
-content-hash = "be233aa76cb6e5a7e387c5318f4d2f757353c1b6505f532086eac46fe271a55e"
+content-hash = "d90db3d070f5095df8f75fa5761ec4df7b9edb12b09909f13499596c476e0b42"

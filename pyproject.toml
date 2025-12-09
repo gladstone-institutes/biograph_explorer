@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "biograph_explorer"
 version = "0.1.0"
-description = "Streamlit application for multi-gene TRAPI query integration with NetworkX clustering and LLM-assisted exploration using PyVis visualization"
+description = "Streamlit application for multi-gene TRAPI query integration with NetworkX clustering and LLM-assisted exploration using Cytoscape.js visualization"
 authors = ["Natalie Gill"]
 license = "MIT"
 readme = "README.md"
@@ -14,7 +14,7 @@ pydantic = "^2.11.9"
 networkx = "^3.5"
 pandas = "^2.2.1"
 python-louvain = "^0.16"
-st-link-analysis = "^0.4.0"
+streamlit-cytoscape = ">=0.1.1"
 scipy = "^1.16.2"
 
 

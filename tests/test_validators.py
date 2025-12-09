@@ -1,17 +1,8 @@
-"""Tests for input validators.
-
-Tests:
-- Gene list validation
-- Disease CURIE validation
-- CURIE format validation
-- Parameter validation
-
-Phase 2 Status: Stub created
-TODO: Implement tests
-"""
+"""Tests for input validators."""
 
 import pytest
 from biograph_explorer.utils import validate_gene_list, validate_disease_curie, ValidationError
+from biograph_explorer.utils.validators import validate_curie, validate_convergence_threshold
 
 
 class TestGeneListValidation:
@@ -19,27 +10,34 @@ class TestGeneListValidation:
 
     def test_validate_valid_gene_list(self):
         """Test validation of valid gene list."""
-        pytest.skip("TODO: Implement test")
+        result = validate_gene_list(["APOE", "APP", "PSEN1"])
+        assert result == ["APOE", "APP", "PSEN1"]
 
     def test_validate_empty_gene_list(self):
         """Test that empty gene list raises ValidationError."""
-        pytest.skip("TODO: Implement test")
+        with pytest.raises(ValidationError):
+            validate_gene_list([])
 
     def test_validate_too_many_genes(self):
         """Test that gene list exceeding max_genes raises ValidationError."""
-        pytest.skip("TODO: Implement test")
+        genes = [f"GENE{i}" for i in range(101)]
+        with pytest.raises(ValidationError):
+            validate_gene_list(genes, max_genes=100)
 
     def test_gene_list_trimming(self):
         """Test that gene symbols are trimmed and cleaned."""
-        pytest.skip("TODO: Implement test")
+        result = validate_gene_list([" APOE ", " APP "])
+        assert result == ["APOE", "APP"]
 
     def test_gene_list_uppercasing(self):
         """Test that gene symbols are converted to uppercase."""
-        pytest.skip("TODO: Implement test")
+        result = validate_gene_list(["apoe", "App"])
+        assert result == ["APOE", "APP"]
 
     def test_duplicate_genes(self):
         """Test handling of duplicate gene symbols."""
-        pytest.skip("TODO: Implement test")
+        result = validate_gene_list(["APOE", "APOE", "APP"])
+        assert result == ["APOE", "APP"]
 
 
 class TestDiseaseCURIEValidation:
@@ -47,19 +45,23 @@ class TestDiseaseCURIEValidation:
 
     def test_validate_valid_mondo_curie(self):
         """Test validation of valid MONDO CURIE."""
-        pytest.skip("TODO: Implement test")
+        result = validate_disease_curie("MONDO:0004975")
+        assert result == "MONDO:0004975"
 
     def test_validate_valid_doid_curie(self):
         """Test validation of valid DOID CURIE."""
-        pytest.skip("TODO: Implement test")
+        result = validate_disease_curie("DOID:10652")
+        assert result == "DOID:10652"
 
     def test_validate_invalid_curie_format(self):
         """Test that invalid CURIE format raises ValidationError."""
-        pytest.skip("TODO: Implement test")
+        with pytest.raises(ValidationError):
+            validate_disease_curie("not-a-curie")
 
     def test_validate_empty_curie(self):
         """Test that empty string raises ValidationError."""
-        pytest.skip("TODO: Implement test")
+        with pytest.raises(ValidationError):
+            validate_disease_curie("")
 
 
 class TestCURIEValidation:
@@ -74,7 +76,8 @@ class TestCURIEValidation:
             "HGNC:1234",
             "UniProtKB:P12345",
         ]
-        pytest.skip("TODO: Implement test")
+        for curie in valid_curies:
+            assert validate_curie(curie) is True
 
     def test_invalid_curie_formats(self):
         """Test various invalid CURIE formats."""
@@ -83,9 +86,9 @@ class TestCURIEValidation:
             ":12345",
             "PREFIX:",
             "12345",
-            "",
         ]
-        pytest.skip("TODO: Implement test")
+        for curie in invalid_curies:
+            assert validate_curie(curie) is False
 
 
 class TestParameterValidation:
@@ -93,12 +96,14 @@ class TestParameterValidation:
 
     def test_convergence_threshold_validation(self):
         """Test convergence threshold validation."""
-        pytest.skip("TODO: Implement test")
+        assert validate_convergence_threshold(2) == 2
 
     def test_negative_threshold(self):
         """Test that negative threshold raises ValidationError."""
-        pytest.skip("TODO: Implement test")
+        with pytest.raises(ValidationError):
+            validate_convergence_threshold(0)
 
     def test_excessive_threshold(self):
         """Test that excessively high threshold raises ValidationError."""
-        pytest.skip("TODO: Implement test")
+        with pytest.raises(ValidationError):
+            validate_convergence_threshold(51)

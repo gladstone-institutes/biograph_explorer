@@ -1,15 +1,15 @@
-"""Network visualization using st-link-analysis component.
+"""Network visualization using streamlit-cytoscape component.
 
 Features:
 - Interactive Cytoscape.js graph rendering
 - Multiple layout algorithms (cose, fcose, circle, grid, etc.)
-- Node sizing by centrality or gene frequency
+- Dynamic node sizing by centrality or gene frequency
 - Node coloring and icons by category
 - Edge styling with predicates
 - Material Icons for node types
 - Built-in fullscreen and JSON export
 
-Phase 2 Status: Implemented with st-link-analysis
+Phase 2 Status: Implemented with streamlit-cytoscape
 """
 
 from typing import Optional, List, Dict, Any, Tuple
@@ -20,10 +20,10 @@ import logging
 import base64
 
 try:
-    from st_link_analysis import NodeStyle, EdgeStyle
-    ST_LINK_ANALYSIS_AVAILABLE = True
+    from streamlit_cytoscape import NodeStyle, EdgeStyle
+    STREAMLIT_CYTOSCAPE_AVAILABLE = True
 except ImportError:
-    ST_LINK_ANALYSIS_AVAILABLE = False
+    STREAMLIT_CYTOSCAPE_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -225,14 +225,27 @@ def prepare_cytoscape_elements(
         is_query_gene = node_attrs.get("is_query_gene", False)
         node_element["data"]["is_query_gene"] = is_query_gene
 
+        # Set shape based on query status (triangles for query nodes, circles for others)
+        node_element["data"]["node_shape"] = "triangle" if is_query_gene else "ellipse"
+
+        # Adjust icon sizing/position for triangles (icons need to be smaller and shifted down)
+        if is_query_gene:
+            node_element["data"]["bg_width"] = "55%"
+            node_element["data"]["bg_height"] = "55%"
+            node_element["data"]["bg_position_y"] = "80%"
+        else:
+            node_element["data"]["bg_width"] = "70%"
+            node_element["data"]["bg_height"] = "70%"
+            node_element["data"]["bg_position_y"] = "50%"
+
         # Calculate node size (15-45px range from PROJECT_PLAN.md)
         base_size = 15 + (normalized_metrics.get(node_id, 0.5) * 30)
 
-        # Query genes get larger minimum size
+        # Query genes (triangles) get larger size (10% bigger, minimum 30px)
         if is_query_gene:
-            base_size = max(base_size, 25)
+            base_size = max(base_size * 1.1, 30)
 
-        node_element["data"]["size"] = base_size
+        node_element["data"]["size"] = round(base_size, 1)
 
         # Add metrics for tooltip/inspection
         node_element["data"]["gene_frequency"] = node_attrs.get("gene_frequency", 0)
@@ -245,7 +258,7 @@ def prepare_cytoscape_elements(
         source = edge_element["data"]["source"]
         target = edge_element["data"]["target"]
 
-        # Add unique ID for st-link-analysis (REQUIRED)
+        # Add unique ID for streamlit-cytoscape (REQUIRED)
         edge_element["data"]["id"] = f"e{idx}"
 
         # Get edge data from graph
@@ -427,8 +440,8 @@ def create_node_styles(graph: nx.DiGraph) -> List["NodeStyle"]:
     Returns:
         List of NodeStyle objects, one per unique category
     """
-    if not ST_LINK_ANALYSIS_AVAILABLE:
-        raise ImportError("st-link-analysis not installed. Run: pip install st-link-analysis")
+    if not STREAMLIT_CYTOSCAPE_AVAILABLE:
+        raise ImportError("streamlit-cytoscape not installed. Run: pip install streamlit-cytoscape")
 
     # Extract unique categories
     categories = set()
@@ -437,20 +450,29 @@ def create_node_styles(graph: nx.DiGraph) -> List["NodeStyle"]:
         categories.add(category)
 
     # Create NodeStyle for each category
+    # custom_styles enables dynamic node sizing from node data
     node_styles = []
     for category in sorted(categories):
         color = CATEGORY_COLORS.get(category, CATEGORY_COLORS["Other"])
         icon = CATEGORY_ICONS.get(category)
 
         # Use "name" as caption (displays gene symbol or node label)
-        # Only include icon parameter if icon is not None
+        # custom_styles reads size from node data for dynamic sizing
         if icon:
             node_styles.append(
                 NodeStyle(
                     label=category,
                     color=color,
                     caption="name",
-                    icon=icon
+                    icon=icon,
+                    custom_styles={
+                        "width": "data(size)",
+                        "height": "data(size)",
+                        "shape": "data(node_shape)",
+                        "background-width": "data(bg_width)",
+                        "background-height": "data(bg_height)",
+                        "background-position-y": "data(bg_position_y)"
+                    }
                 )
             )
         else:
@@ -458,7 +480,12 @@ def create_node_styles(graph: nx.DiGraph) -> List["NodeStyle"]:
                 NodeStyle(
                     label=category,
                     color=color,
-                    caption="name"
+                    caption="name",
+                    custom_styles={
+                        "width": "data(size)",
+                        "height": "data(size)",
+                        "shape": "data(node_shape)"
+                    }
                 )
             )
 
@@ -474,8 +501,8 @@ def create_edge_styles(graph: nx.DiGraph) -> List["EdgeStyle"]:
     Returns:
         List of EdgeStyle objects, one per unique predicate
     """
-    if not ST_LINK_ANALYSIS_AVAILABLE:
-        raise ImportError("st-link-analysis not installed. Run: pip install st-link-analysis")
+    if not STREAMLIT_CYTOSCAPE_AVAILABLE:
+        raise ImportError("streamlit-cytoscape not installed. Run: pip install streamlit-cytoscape")
 
     # Extract unique predicates
     predicates = set()
@@ -620,7 +647,7 @@ def render_network_visualization(
     highlight_nodes: Optional[List[str]] = None,
     disease_curie: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Prepare network visualization data for st-link-analysis component.
+    """Prepare network visualization data for streamlit-cytoscape component.
 
     Args:
         graph: NetworkX DiGraph to visualize
@@ -639,8 +666,8 @@ def render_network_visualization(
         >>> st_link_analysis(viz_data["elements"], viz_data["layout"],
         ...                  viz_data["node_styles"], viz_data["edge_styles"])
     """
-    if not ST_LINK_ANALYSIS_AVAILABLE:
-        logger.error("st-link-analysis not installed")
+    if not STREAMLIT_CYTOSCAPE_AVAILABLE:
+        logger.error("streamlit-cytoscape not installed")
         return None
 
     if graph.number_of_nodes() == 0:

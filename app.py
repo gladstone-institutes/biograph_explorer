@@ -371,7 +371,7 @@ if run_query:
         st.session_state.disease_curie = disease_curie  # Store for visualization sampling
         
         progress_bar.progress(100)
-        status_text.text(":material/check_circle: Analysis complete!")
+        status_text.markdown(":material/check_circle: Analysis complete!")
         
     except ValidationError as e:
         st.error(f"Validation error: {e}")
@@ -504,9 +504,9 @@ if st.session_state.graph:
                 help="View all nodes or filter to a specific community"
             )
 
-        # Render st-link-analysis visualization
+        # Render streamlit-cytoscape visualization
         from biograph_explorer.ui.network_viz import render_network_visualization
-        from st_link_analysis import st_link_analysis
+        from streamlit_cytoscape import streamlit_cytoscape
 
         # Determine which graph to visualize based on cluster selection
         if selected_cluster != "All Nodes" and st.session_state.clustering_results:
@@ -543,7 +543,7 @@ if st.session_state.graph:
 
         if viz_data:
             # Render component
-            st_link_analysis(
+            streamlit_cytoscape(
                 viz_data["elements"],
                 layout=viz_data["layout"],
                 node_styles=viz_data["node_styles"],
