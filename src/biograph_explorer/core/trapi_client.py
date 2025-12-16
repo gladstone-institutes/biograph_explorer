@@ -11,11 +11,15 @@ Handles:
 """
 
 import json
+import requests
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime
 from pydantic import BaseModel, Field
 import logging
+
+# Node Normalizer API for CURIE-to-name resolution
+NODE_NORMALIZER_URL = "https://nodenormalization-sri.renci.org/1.4/get_normalized_nodes"
 
 try:
     from TCT import TCT, name_resolver, translator_metakg, translator_kpinfo, translator_query
@@ -203,6 +207,44 @@ class TRAPIClient:
         except Exception as e:
             logger.warning(f"Disease lookup failed for '{query}': {e}")
             return []
+
+    def _resolve_curie_names(self, curies: List[str], timeout: int = 30) -> Dict[str, str]:
+        """Resolve CURIEs to human-readable names using Node Normalizer API.
+
+        Args:
+            curies: List of CURIE strings (e.g., ['NCBIGene:7124', 'CHEBI:15377'])
+            timeout: Request timeout in seconds
+
+        Returns:
+            Dict mapping CURIE to name. Falls back to CURIE itself if not found.
+        """
+        curie_to_name = {}
+
+        if not curies:
+            return curie_to_name
+
+        try:
+            response = requests.post(
+                NODE_NORMALIZER_URL,
+                json={"curies": curies},
+                timeout=timeout
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            for curie in curies:
+                result = data.get(curie)
+                if result and result.get('id', {}).get('label'):
+                    curie_to_name[curie] = result['id']['label']
+                else:
+                    curie_to_name[curie] = curie  # Fallback to CURIE
+            logger.info(f"Resolved names for {len(curie_to_name)} nodes ({sum(1 for c, n in curie_to_name.items() if c != n)} with labels)")
+
+        except Exception as e:
+            logger.warning(f"Name resolution failed: {e}, using CURIEs as fallback")
+            curie_to_name = {curie: curie for curie in curies}
+
+        return curie_to_name
 
     def query_gene_neighborhood(
         self,
@@ -419,6 +461,10 @@ class TRAPIClient:
         # Step 7: Post-filter edges by predicate granularity
         # APIs may return edges with predicates we didn't request, so filter them here
         edges_before_filter = len(edges)
+
+        if progress_callback:
+            progress_callback(f"Filtering {edges_before_filter} edges by predicate granularity...")
+
         filtered_edges = []
         for edge in edges:
             edge_predicate = edge.get('predicate', '')
@@ -430,7 +476,65 @@ class TRAPIClient:
                 filtered_edges.append(edge)
 
         edges = filtered_edges
-        logger.info(f"Post-filtered edges: {len(edges)} (removed {edges_before_filter - len(edges)} edges)")
+        edges_removed = edges_before_filter - len(edges)
+        logger.info(f"Post-filtered edges: {len(edges)} (removed {edges_removed} by predicate filter)")
+
+        # Step 8: For 2-hop queries, remove orphan intermediate nodes
+        # An intermediate node is orphan if it's not connected to both a query gene AND the disease
+        if use_two_hop and disease_curie:
+            # Build connectivity sets
+            nodes_connected_to_genes = set()  # intermediates with edge from query gene
+            nodes_connected_to_disease = set()  # intermediates with edge to disease
+
+            for edge in edges:
+                subj = edge.get('subject', '')
+                obj = edge.get('object', '')
+
+                # Edge from query gene to intermediate
+                if subj in input_gene_curies:
+                    nodes_connected_to_genes.add(obj)
+                # Edge from intermediate to disease
+                if obj == disease_curie:
+                    nodes_connected_to_disease.add(subj)
+
+            # Valid intermediates are connected to BOTH query genes AND disease
+            valid_intermediates = nodes_connected_to_genes & nodes_connected_to_disease
+            logger.info(f"Valid intermediates (connected to both gene and disease): {len(valid_intermediates)}")
+
+            # Filter edges to only include those involving valid intermediates (or direct gene-disease)
+            edges_before_orphan_filter = len(edges)
+            valid_edges = []
+            for edge in edges:
+                subj = edge.get('subject', '')
+                obj = edge.get('object', '')
+
+                # Keep edge if:
+                # 1. It's gene → valid_intermediate
+                # 2. It's valid_intermediate → disease
+                # 3. It's a direct gene → disease edge (rare but possible)
+                if subj in input_gene_curies and obj in valid_intermediates:
+                    valid_edges.append(edge)
+                elif subj in valid_intermediates and obj == disease_curie:
+                    valid_edges.append(edge)
+                elif subj in input_gene_curies and obj == disease_curie:
+                    valid_edges.append(edge)
+
+            orphans_removed = edges_before_orphan_filter - len(valid_edges)
+            edges = valid_edges
+            edges_removed += orphans_removed
+            logger.info(f"Removed {orphans_removed} edges to orphan intermediates, {len(edges)} edges remaining")
+
+        # Step 9: Resolve common names for all nodes in filtered edges
+        if progress_callback:
+            progress_callback("Resolving common names for nodes...")
+
+        unique_nodes = set()
+        for edge in edges:
+            unique_nodes.add(edge.get('subject', ''))
+            unique_nodes.add(edge.get('object', ''))
+        unique_nodes.discard('')
+
+        curie_to_name = self._resolve_curie_names(list(unique_nodes))
 
         # Create CURIE to symbol reverse mapping for labels
         curie_to_symbol = {curie: symbol for symbol, curie in gene_curie_map.items()}
@@ -444,12 +548,15 @@ class TRAPIClient:
             metadata={
                 "gene_symbols": gene_symbols,
                 "normalized_genes": gene_curie_map,
-                "curie_to_symbol": curie_to_symbol,  # For label lookup
+                "curie_to_symbol": curie_to_symbol,  # For label lookup (query genes only)
+                "curie_to_name": curie_to_name,  # Human-readable names for all nodes
                 "predicates_used": len(hop1_predicates) + len(hop2_predicates) if use_two_hop else len(predicates) if predicates else 0,
                 "intermediate_categories": intermediate_categories,  # Track filter
                 "query_pattern": "2-hop" if use_two_hop else "1-hop",
                 "predicate_min_depth": predicate_min_depth,
                 "exclude_literature": exclude_literature,
+                "edges_before_filter": edges_before_filter,
+                "edges_removed": edges_removed,
             },
             apis_queried=len(selected_APIs),
             apis_succeeded=len(successful_apis),

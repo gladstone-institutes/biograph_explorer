@@ -58,6 +58,7 @@ class GraphBuilder:
         edges: List[Dict[str, Any]],
         query_gene_curies: List[str],
         curie_to_symbol: Optional[Dict[str, str]] = None,
+        curie_to_name: Optional[Dict[str, str]] = None,
     ) -> KnowledgeGraph:
         """Build NetworkX DiGraph from TRAPI edge list.
 
@@ -67,6 +68,8 @@ class GraphBuilder:
             edges: List of TRAPI edges (dicts with subject, object, predicate)
             query_gene_curies: List of input gene CURIEs for highlighting
             curie_to_symbol: Optional mapping of gene CURIEs to original symbols
+            curie_to_name: Optional mapping of CURIEs to human-readable names.
+                If provided, skips network lookup for names (uses cached names).
 
         Returns:
             KnowledgeGraph with NetworkX DiGraph and metadata
@@ -99,9 +102,14 @@ class GraphBuilder:
 
         # Get unique nodes for name lookup
         unique_nodes = list(set(subjects + objects))
-        logger.info(f"Looking up names for {len(unique_nodes)} unique nodes...")
 
-        curie_to_label = self._lookup_node_names(unique_nodes)
+        # Use cached names if provided, otherwise fetch from network
+        if curie_to_name:
+            curie_to_label = curie_to_name
+            logger.info(f"Using {len(curie_to_label)} cached node names")
+        else:
+            logger.info(f"Looking up names for {len(unique_nodes)} unique nodes...")
+            curie_to_label = self._lookup_node_names(unique_nodes)
 
         # Build NetworkX graph with CURIEs as node IDs
         graph = nx.DiGraph()

@@ -26,8 +26,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# No custom CSS needed - using Material Design theme from .streamlit/config.toml
-
 # Initialize session state
 if 'graph' not in st.session_state:
     st.session_state.graph = None
@@ -153,10 +151,12 @@ else:  # Load Cached Query
                     engine = ClusteringEngine()
 
                     curie_to_symbol = cached_response.metadata.get("curie_to_symbol", {})
+                    curie_to_name = cached_response.metadata.get("curie_to_name", {})
                     kg = builder.build_from_trapi_edges(
                         cached_response.edges,
                         cached_response.input_genes,
-                        curie_to_symbol
+                        curie_to_symbol,
+                        curie_to_name
                     )
 
                     progress_bar.progress(60)
@@ -288,7 +288,7 @@ query_pattern = st.sidebar.radio(
         "2-hop (Gene → Intermediate → Disease)"
     ],
     index=1,  # Default to 2-hop
-    help="1-hop finds all direct connections to genes. 2-hop finds therapeutic targets between genes and disease."
+    help="1-hop finds all direct connections to genes. 2-hop finds targets between genes and disease."
 )
 
 if query_pattern == "2-hop (Gene → Intermediate → Disease)":
@@ -321,7 +321,7 @@ st.sidebar.markdown("### Predicate Filtering")
 predicate_preset = st.sidebar.selectbox(
     "Relationship Granularity",
     options=["All Relationships", "Standard", "Specific Only"],
-    index=1,  # Default to "Standard"
+    index=2,  # Default to "Specific Only"
     help="Filter out vague relationship types. Standard excludes generic predicates like 'related_to'."
 )
 
@@ -445,24 +445,28 @@ if run_query:
         
         progress_bar.progress(60)
 
-        # Show query pattern used
+        # Show query pattern used with filtering info
         query_pattern_used = response.metadata.get("query_pattern", "unknown")
+        edges_removed = response.metadata.get("edges_removed", 0)
+        filter_info = f" (filtered {edges_removed} vague relationships)" if edges_removed > 0 else ""
+
         if query_pattern_used == "2-hop":
             intermediate_cats = response.metadata.get("intermediate_categories", [])
             intermediate_str = ", ".join([c.replace("biolink:", "") for c in intermediate_cats])
-            st.success(f":material/check_circle: 2-hop query: Found {len(response.edges)} edges from {response.apis_succeeded}/{response.apis_queried} APIs")
+            st.success(f":material/check_circle: 2-hop query: Found {len(response.edges)} edges from {response.apis_succeeded}/{response.apis_queried} APIs{filter_info}")
             st.info(f":material/timeline: Query: Gene → [{intermediate_str}] → {disease_curie}")
         else:
-            st.success(f":material/check_circle: 1-hop query: Found {len(response.edges)} edges from {response.apis_succeeded}/{response.apis_queried} APIs")
+            st.success(f":material/check_circle: 1-hop query: Found {len(response.edges)} edges from {response.apis_succeeded}/{response.apis_queried} APIs{filter_info}")
         
         # Step 3: Build graph
         status_text.text("Building knowledge graph...")
         progress_bar.progress(70)
 
-        # Get curie_to_symbol mapping from response metadata
+        # Get curie_to_symbol and curie_to_name mappings from response metadata
         curie_to_symbol = response.metadata.get("curie_to_symbol", {})
+        curie_to_name = response.metadata.get("curie_to_name", {})
 
-        kg = builder.build_from_trapi_edges(response.edges, response.input_genes, curie_to_symbol)
+        kg = builder.build_from_trapi_edges(response.edges, response.input_genes, curie_to_symbol, curie_to_name)
         
         # Calculate gene frequency
         gene_freq = builder.calculate_gene_frequency(kg.graph, response.input_genes)
