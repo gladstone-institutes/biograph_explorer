@@ -72,7 +72,7 @@ class TRAPIClient:
     def __init__(
         self,
         cache_dir: Path = Path("data/cache"),
-        timeout: int = 240,
+        timeout: int = 480,
     ):
         """Initialize TRAPI client.
 

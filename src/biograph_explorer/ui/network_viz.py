@@ -34,6 +34,8 @@ CATEGORY_COLORS = {
     "Protein": "#00F6B3",
     "ChemicalEntity": "#D55E00",
     "BiologicalProcess": "#D5C711",
+    "AnatomicalEntity": "#c9246f",
+    "Pathway": "#D5C711",
     "Cluster": "#005F45",
     "Other": "#666666",
 }
@@ -65,8 +67,10 @@ CATEGORY_ICONS = {
     "Gene": _svg_to_data_uri(_ASSETS_DIR / "genetics.svg"),
     "Disease": _svg_to_data_uri(_ASSETS_DIR / "sick.svg"),
     "ChemicalEntity": _svg_to_data_uri(_ASSETS_DIR / "experiment.svg"),
-    "Protein": None,
-    "BiologicalProcess": None,
+    "Protein": _svg_to_data_uri(_ASSETS_DIR / "polymer.svg"),
+    "Pathway": _svg_to_data_uri(_ASSETS_DIR / "arrow_split.svg"),
+    "BiologicalProcess": _svg_to_data_uri(_ASSETS_DIR / "arrow_split.svg"),
+    "AnatomicalEntity": _svg_to_data_uri(_ASSETS_DIR / "immunology.svg"),
     "Cluster": None,
     "Other": None,
 }
