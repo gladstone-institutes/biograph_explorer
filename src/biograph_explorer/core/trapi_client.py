@@ -31,7 +31,12 @@ try:
 except ImportError:
     TCT_AVAILABLE = False
 
-from biograph_explorer.utils.biolink_predicates import filter_predicates_by_granularity
+from biograph_explorer.utils.biolink_predicates import (
+    filter_predicates_by_granularity,
+    filter_disease_bp_predicates,
+    DISEASE_BP_INFORMATIVE_PREDICATES,
+    DEFAULT_BP_INTERMEDIATE_CATEGORIES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +77,7 @@ class TRAPIClient:
     def __init__(
         self,
         cache_dir: Path = Path("data/cache"),
-        timeout: int = 480,
+        timeout: int = 600,
     ):
         """Initialize TRAPI client.
 
@@ -431,6 +436,8 @@ class TRAPIClient:
         predicates: Optional[List[str]] = None,
         predicate_min_depth: int = 2,
         exclude_literature: bool = True,
+        exclude_coexpression: bool = True,
+        exclude_homology: bool = True,
         progress_callback: Optional[Callable[[str], None]] = None,
     ) -> TRAPIResponse:
         """Query Translator APIs for gene-disease paths through intermediate entities.
@@ -448,6 +455,8 @@ class TRAPIClient:
             predicate_min_depth: Minimum depth in biolink hierarchy (0=all, 1=exclude root,
                                2=standard, 3=specific only). Default: 2
             exclude_literature: If True, exclude 'occurs_together_in_literature_with'. Default: True
+            exclude_coexpression: If True, exclude 'coexpressed_with'. Default: True
+            exclude_homology: If True, exclude 'homologous_to' and related predicates. Default: True
             progress_callback: Optional callback for progress updates
 
         Returns:
@@ -643,7 +652,8 @@ class TRAPIClient:
             edge_predicate = edge.get('predicate', '')
             # Check if this predicate passes our filter
             filtered = filter_predicates_by_granularity(
-                [edge_predicate], predicate_min_depth, exclude_literature
+                [edge_predicate], predicate_min_depth, exclude_literature,
+                exclude_coexpression, exclude_homology
             )
             if filtered:
                 filtered_edges.append(edge)
@@ -728,6 +738,8 @@ class TRAPIClient:
                 "query_pattern": "2-hop" if use_two_hop else "1-hop",
                 "predicate_min_depth": predicate_min_depth,
                 "exclude_literature": exclude_literature,
+                "exclude_coexpression": exclude_coexpression,
+                "exclude_homology": exclude_homology,
                 "edges_before_filter": edges_before_filter,
                 "edges_removed": edges_removed,
                 "api_timings": [asdict(t) for t in api_timings],
@@ -738,6 +750,604 @@ class TRAPIClient:
         )
 
         logger.info(f"Query complete: {len(edges)} edges from {response.apis_succeeded}/{response.apis_queried} APIs")
+
+        # Cache response
+        cache_file = self._cache_response(response)
+        logger.info(f"Cached response to {cache_file}")
+
+        if progress_callback:
+            progress_callback(f"Query complete: {len(edges)} edges found")
+
+        return response
+
+    def query_disease_bioprocesses(
+        self,
+        disease_curie: str,
+        filter_predicates: bool = True,
+        timeout_override: Optional[int] = None,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[List[str], Dict[str, Any]]:
+        """Query TRAPI for BiologicalProcesses associated with a disease.
+
+        Stage 1 of the Gene → [Intermediate] → Disease-associated BiologicalProcess pattern.
+        Discovers BiologicalProcesses linked to a disease and filters to informative predicates.
+
+        Args:
+            disease_curie: Disease CURIE (e.g., 'MONDO:0004975' for Alzheimer's)
+            filter_predicates: If True, filter to informative predicates (default: True)
+            timeout_override: Optional timeout override in seconds (default: use self.timeout)
+            progress_callback: Optional callback for progress updates
+
+        Returns:
+            Tuple of:
+                - List of unique BiologicalProcess CURIEs
+                - Metadata dict with edge counts, predicate distribution, etc.
+        """
+        # Load Translator resources if not already loaded
+        self._load_translator_resources()
+
+        if progress_callback:
+            progress_callback(f"Discovering BiologicalProcesses for {disease_curie}...")
+
+        # Auto-discover predicates for Disease → BiologicalProcess
+        disease_categories = ["biolink:Disease"]
+        bp_categories = ["biolink:BiologicalProcess"]
+
+        predicates = list(
+            set(
+                TCT.select_concept(
+                    sub_list=disease_categories,
+                    obj_list=bp_categories,
+                    metaKG=self.metaKG,
+                )
+            )
+        )
+        logger.info(f"Disease→BP: {len(predicates)} predicates discovered")
+
+        # Select APIs capable of Disease → BiologicalProcess queries
+        selected_APIs = TCT.select_API(
+            sub_list=disease_categories,
+            obj_list=bp_categories,
+            metaKG=self.metaKG,
+        )
+        logger.info(f"Disease→BP: {len(selected_APIs)} APIs selected")
+
+        if progress_callback:
+            progress_callback(f"Querying {len(selected_APIs)} APIs for disease BiologicalProcesses...")
+
+        # Build 1-hop TRAPI query: Disease → BiologicalProcess
+        query_json = {
+            'message': {
+                'query_graph': {
+                    'nodes': {
+                        'n00': {
+                            'ids': [disease_curie],
+                            'categories': disease_categories
+                        },
+                        'n01': {
+                            'categories': bp_categories
+                        }
+                    },
+                    'edges': {
+                        'e00': {
+                            'subject': 'n00',
+                            'object': 'n01',
+                            'predicates': predicates
+                        }
+                    }
+                }
+            }
+        }
+
+        # Build API predicates dictionary
+        API_predicates = {}
+        API_withMetaKG = list(set(self.metaKG["API"]))
+        for api in API_withMetaKG:
+            API_predicates[api] = list(set(self.metaKG[self.metaKG["API"] == api]["Predicate"]))
+
+        # Use timeout override if provided
+        original_timeout = self.timeout
+        if timeout_override:
+            self.timeout = timeout_override
+
+        # Execute parallel queries
+        query_start = time.time()
+        try:
+            query_results, api_timings = self._parallel_api_query_with_timing(
+                query_json=query_json,
+                selected_apis=selected_APIs,
+                api_predicates=API_predicates,
+            )
+        finally:
+            # Restore original timeout
+            self.timeout = original_timeout
+
+        query_duration = time.time() - query_start
+        successful_count = sum(1 for t in api_timings if t.success)
+        logger.info(f"Disease→BP query completed in {query_duration:.1f}s: {len(query_results)} edges from {successful_count}/{len(api_timings)} APIs")
+
+        # Convert results to edges list
+        edges = []
+        for k, v in query_results.items():
+            if isinstance(v, dict) and 'subject' in v and 'object' in v:
+                edges.append(v)
+
+        edges_before_filter = len(edges)
+
+        # Filter to informative predicates if requested
+        if filter_predicates:
+            if progress_callback:
+                progress_callback(f"Filtering {len(edges)} edges to informative predicates...")
+            edges = filter_disease_bp_predicates(edges, use_informative_only=True)
+
+        edges_after_filter = len(edges)
+        logger.info(f"Disease→BP predicate filter: {edges_before_filter} → {edges_after_filter} edges")
+
+        # Extract unique BiologicalProcess CURIEs
+        bp_curies = list(set(edge.get('object', '') for edge in edges if edge.get('object', '')))
+
+        # Extract Disease→BP edges with full details for tracking relationships
+        disease_bp_edges = []
+        bp_to_predicates: Dict[str, List[str]] = {}
+        for edge in edges:
+            bp_curie = edge.get('object', '')
+            if bp_curie:
+                disease_bp_edges.append({
+                    'bp_curie': bp_curie,
+                    'predicate': edge.get('predicate', ''),
+                    'disease_curie': edge.get('subject', ''),
+                    'sources': edge.get('sources', []),
+                })
+                # Group predicates by BP CURIE for easy lookup
+                if bp_curie not in bp_to_predicates:
+                    bp_to_predicates[bp_curie] = []
+                pred = edge.get('predicate', '')
+                if pred and pred not in bp_to_predicates[bp_curie]:
+                    bp_to_predicates[bp_curie].append(pred)
+
+        # Calculate predicate distribution
+        predicate_counts = {}
+        for edge in edges:
+            pred = edge.get('predicate', '').replace('biolink:', '')
+            predicate_counts[pred] = predicate_counts.get(pred, 0) + 1
+
+        # Resolve BP names
+        if progress_callback:
+            progress_callback(f"Resolving names for {len(bp_curies)} BiologicalProcesses...")
+
+        bp_names = self._resolve_curie_names(bp_curies)
+
+        metadata = {
+            'disease_curie': disease_curie,
+            'total_edges_before_filter': edges_before_filter,
+            'total_edges_after_filter': edges_after_filter,
+            'unique_bioprocesses': len(bp_curies),
+            'predicate_distribution': predicate_counts,
+            'filter_applied': filter_predicates,
+            'apis_queried': len(selected_APIs),
+            'apis_succeeded': successful_count,
+            'query_duration': round(query_duration, 3),
+            'api_timings': [asdict(t) for t in api_timings],
+            'bp_names': bp_names,  # CURIE → name mapping
+            'bp_to_predicates': bp_to_predicates,  # CURIE → [predicates] for tracking relationships
+            'disease_bp_edges': disease_bp_edges,  # Full edge list for optional rendering
+        }
+
+        if progress_callback:
+            progress_callback(f"Found {len(bp_curies)} BiologicalProcesses (filtered from {edges_before_filter} edges)")
+
+        return bp_curies, metadata
+
+    def _cache_disease_bp_results(
+        self,
+        disease_curie: str,
+        bp_curies: List[str],
+        metadata: Dict[str, Any],
+    ) -> Path:
+        """Cache Disease → BiologicalProcess discovery results.
+
+        Args:
+            disease_curie: Disease CURIE
+            bp_curies: List of discovered BP CURIEs
+            metadata: Query metadata
+
+        Returns:
+            Path to cached file
+        """
+        # Sanitize disease CURIE for filename
+        safe_curie = disease_curie.replace(":", "_").replace("/", "_")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        cache_file = self.cache_dir / f"disease_bp_{safe_curie}_{timestamp}.json"
+
+        cache_data = {
+            'disease_curie': disease_curie,
+            'bioprocess_curies': bp_curies,
+            'metadata': metadata,
+            'timestamp': timestamp,
+        }
+
+        with open(cache_file, "w") as f:
+            json.dump(cache_data, f, indent=2)
+
+        logger.info(f"Cached Disease→BP results to {cache_file}")
+        return cache_file
+
+    def list_cached_disease_bp_results(self, disease_curie: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List cached Disease → BiologicalProcess discovery results.
+
+        Args:
+            disease_curie: Optional filter by disease CURIE
+
+        Returns:
+            List of cache file info dicts
+        """
+        if not self.cache_dir.exists():
+            return []
+
+        pattern = "disease_bp_*.json"
+        cache_files = sorted(
+            self.cache_dir.glob(pattern),
+            key=lambda x: x.stat().st_mtime,
+            reverse=True
+        )
+
+        results = []
+        for f in cache_files:
+            try:
+                with open(f, "r") as fp:
+                    data = json.load(fp)
+
+                cached_disease = data.get('disease_curie', '')
+
+                # Filter by disease if specified
+                if disease_curie and cached_disease != disease_curie:
+                    continue
+
+                bp_count = len(data.get('bioprocess_curies', []))
+                timestamp_str = data.get('timestamp', '')
+
+                try:
+                    timestamp = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+                    date_str = timestamp.strftime("%b %d, %Y %I:%M %p")
+                except ValueError:
+                    date_str = timestamp_str
+                    timestamp = None
+
+                results.append({
+                    'path': f,
+                    'disease_curie': cached_disease,
+                    'bp_count': bp_count,
+                    'timestamp': timestamp,
+                    'timestamp_str': timestamp_str,
+                    'label': f"{cached_disease} - {bp_count} BPs ({date_str})",
+                })
+
+            except Exception as e:
+                logger.warning(f"Error reading cache file {f}: {e}")
+                continue
+
+        return results
+
+    def load_cached_disease_bp_results(self, cache_file: Path) -> Tuple[List[str], Dict[str, Any]]:
+        """Load cached Disease → BiologicalProcess results.
+
+        Args:
+            cache_file: Path to cache file
+
+        Returns:
+            Tuple of (bp_curies list, metadata dict)
+
+        Raises:
+            FileNotFoundError: If cache file doesn't exist
+            ValueError: If cache file is invalid
+        """
+        if not cache_file.exists():
+            raise FileNotFoundError(f"Cache file not found: {cache_file}")
+
+        with open(cache_file, "r") as f:
+            data = json.load(f)
+
+        bp_curies = data.get('bioprocess_curies', [])
+        metadata = data.get('metadata', {})
+
+        logger.info(f"Loaded {len(bp_curies)} cached BPs from {cache_file}")
+        return bp_curies, metadata
+
+    def query_gene_to_bioprocesses(
+        self,
+        gene_symbols: List[str],
+        disease_curie: str,
+        intermediate_categories: Optional[List[str]] = None,
+        bp_curies: Optional[List[str]] = None,
+        bp_metadata: Optional[Dict[str, Any]] = None,
+        filter_disease_bp: bool = True,
+        predicate_min_depth: int = 2,
+        exclude_literature: bool = True,
+        exclude_coexpression: bool = True,
+        exclude_homology: bool = True,
+        timeout_override: Optional[int] = None,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> TRAPIResponse:
+        """Execute two-stage Gene → [Intermediate] → Disease-associated BiologicalProcess query.
+
+        Stage 1: Disease → BiologicalProcess (discover disease-associated BPs)
+        Stage 2: Gene → [Intermediate] → BiologicalProcess (find pathways to those BPs)
+
+        Args:
+            gene_symbols: List of gene symbols to query
+            disease_curie: Disease CURIE for Stage 1 BP discovery
+            intermediate_categories: Intermediate entity types (default: DEFAULT_BP_INTERMEDIATE_CATEGORIES)
+            bp_curies: Optional pre-computed BP CURIEs (skips Stage 1 if provided)
+            bp_metadata: Optional metadata from cached Stage 1 results
+            filter_disease_bp: Filter Stage 1 to informative predicates (default: True)
+            predicate_min_depth: Granularity filter for Stage 2 (default: 2)
+            exclude_literature: Exclude literature co-occurrence predicates (default: True)
+            exclude_coexpression: Exclude 'coexpressed_with' predicate (default: True)
+            exclude_homology: Exclude 'homologous_to' and related predicates (default: True)
+            timeout_override: Optional timeout override in seconds
+            progress_callback: Progress callback
+
+        Returns:
+            TRAPIResponse with merged Stage 2 edges and combined metadata
+        """
+        # Load Translator resources if not already loaded
+        self._load_translator_resources()
+
+        # Use default intermediate categories if not specified
+        if intermediate_categories is None:
+            intermediate_categories = DEFAULT_BP_INTERMEDIATE_CATEGORIES
+
+        # Stage 1: Get disease-associated BiologicalProcesses (or use provided)
+        if bp_curies is None:
+            if progress_callback:
+                progress_callback("Stage 1: Discovering disease BiologicalProcesses...")
+
+            bp_curies, bp_metadata = self.query_disease_bioprocesses(
+                disease_curie=disease_curie,
+                filter_predicates=filter_disease_bp,
+                timeout_override=timeout_override,
+                progress_callback=progress_callback,
+            )
+
+            # Cache Stage 1 results
+            self._cache_disease_bp_results(disease_curie, bp_curies, bp_metadata)
+
+        if not bp_curies:
+            raise ValueError(f"No BiologicalProcesses found for disease {disease_curie}")
+
+        logger.info(f"Stage 1 complete: {len(bp_curies)} BiologicalProcesses")
+
+        # Stage 2: Normalize genes
+        if progress_callback:
+            progress_callback(f"Stage 2: Normalizing {len(gene_symbols)} genes...")
+
+        gene_curie_map = self.normalize_genes(gene_symbols)
+        if not gene_curie_map:
+            raise ValueError("No genes were successfully normalized")
+
+        input_gene_curies = list(gene_curie_map.values())
+        input_gene_categories = ["biolink:Gene"]
+        bp_categories = ["biolink:BiologicalProcess"]
+
+        # Stage 2: Discover predicates for each hop
+        if progress_callback:
+            progress_callback("Stage 2: Discovering predicates for 2-hop query...")
+
+        # Hop 1: Gene → Intermediate
+        hop1_predicates = list(
+            set(
+                TCT.select_concept(
+                    sub_list=input_gene_categories,
+                    obj_list=intermediate_categories,
+                    metaKG=self.metaKG,
+                )
+            )
+        )
+
+        # Hop 2: Intermediate → BiologicalProcess
+        hop2_predicates = list(
+            set(
+                TCT.select_concept(
+                    sub_list=intermediate_categories,
+                    obj_list=bp_categories,
+                    metaKG=self.metaKG,
+                )
+            )
+        )
+
+        logger.info(f"Stage 2 predicates - Hop1 (Gene→Int): {len(hop1_predicates)}, Hop2 (Int→BP): {len(hop2_predicates)}")
+
+        # Select APIs based on hop 1 (most restrictive)
+        selected_APIs = TCT.select_API(
+            sub_list=input_gene_categories,
+            obj_list=intermediate_categories,
+            metaKG=self.metaKG,
+        )
+        logger.info(f"Stage 2: {len(selected_APIs)} APIs selected")
+
+        # Build 2-hop TRAPI query: Gene → [Intermediate] → BiologicalProcess
+        # Use all BP CURIEs as endpoints
+        if progress_callback:
+            progress_callback(f"Stage 2: Querying {len(selected_APIs)} APIs for {len(input_gene_curies)} genes → {len(bp_curies)} BPs...")
+
+        query_json = {
+            'message': {
+                'query_graph': {
+                    'nodes': {
+                        'n00': {
+                            'ids': input_gene_curies,
+                            'categories': input_gene_categories
+                        },
+                        'n01': {
+                            # No IDs = creative query (find any matching intermediates)
+                            'categories': intermediate_categories
+                        },
+                        'n02': {
+                            'ids': bp_curies,
+                            'categories': bp_categories
+                        }
+                    },
+                    'edges': {
+                        'e00': {
+                            'subject': 'n00',
+                            'object': 'n01',
+                            'predicates': hop1_predicates
+                        },
+                        'e01': {
+                            'subject': 'n01',
+                            'object': 'n02',
+                            'predicates': hop2_predicates
+                        }
+                    }
+                }
+            }
+        }
+
+        # Build API predicates dictionary
+        API_predicates = {}
+        API_withMetaKG = list(set(self.metaKG["API"]))
+        for api in API_withMetaKG:
+            API_predicates[api] = list(set(self.metaKG[self.metaKG["API"] == api]["Predicate"]))
+
+        # Use timeout override if provided
+        original_timeout = self.timeout
+        if timeout_override:
+            self.timeout = timeout_override
+
+        # Execute parallel queries
+        query_start = time.time()
+        try:
+            query_results, api_timings = self._parallel_api_query_with_timing(
+                query_json=query_json,
+                selected_apis=selected_APIs,
+                api_predicates=API_predicates,
+            )
+        finally:
+            self.timeout = original_timeout
+
+        query_duration = time.time() - query_start
+        successful_count = sum(1 for t in api_timings if t.success)
+        logger.info(f"Stage 2 query completed in {query_duration:.1f}s: {len(query_results)} edges from {successful_count}/{len(api_timings)} APIs")
+
+        # Convert results to edges list
+        edges = []
+        for k, v in query_results.items():
+            if isinstance(v, dict):
+                edges.append(v)
+
+        edges_before_filter = len(edges)
+
+        # Post-filter edges by predicate granularity
+        if progress_callback:
+            progress_callback(f"Filtering {edges_before_filter} edges by predicate granularity...")
+
+        filtered_edges = []
+        for edge in edges:
+            edge_predicate = edge.get('predicate', '')
+            filtered = filter_predicates_by_granularity(
+                [edge_predicate], predicate_min_depth, exclude_literature,
+                exclude_coexpression, exclude_homology
+            )
+            if filtered:
+                filtered_edges.append(edge)
+
+        edges = filtered_edges
+        edges_removed = edges_before_filter - len(edges)
+        logger.info(f"Stage 2 post-filter: {len(edges)} edges (removed {edges_removed})")
+
+        # Filter orphan intermediates (not connected to both gene AND BP)
+        nodes_connected_to_genes = set()
+        nodes_connected_to_bps = set()
+        bp_curies_set = set(bp_curies)
+
+        for edge in edges:
+            subj = edge.get('subject', '')
+            obj = edge.get('object', '')
+
+            # Edge from query gene to intermediate
+            if subj in input_gene_curies:
+                nodes_connected_to_genes.add(obj)
+            # Edge from intermediate to BP
+            if obj in bp_curies_set:
+                nodes_connected_to_bps.add(subj)
+
+        # Valid intermediates are connected to BOTH query genes AND BPs
+        valid_intermediates = nodes_connected_to_genes & nodes_connected_to_bps
+        logger.info(f"Valid intermediates (connected to both gene and BP): {len(valid_intermediates)}")
+
+        # Filter edges to only include those involving valid intermediates
+        edges_before_orphan = len(edges)
+        valid_edges = []
+        for edge in edges:
+            subj = edge.get('subject', '')
+            obj = edge.get('object', '')
+
+            # Keep edge if:
+            # 1. Gene → valid_intermediate
+            # 2. Valid_intermediate → BP
+            # 3. Direct Gene → BP (rare but possible)
+            if subj in input_gene_curies and obj in valid_intermediates:
+                valid_edges.append(edge)
+            elif subj in valid_intermediates and obj in bp_curies_set:
+                valid_edges.append(edge)
+            elif subj in input_gene_curies and obj in bp_curies_set:
+                valid_edges.append(edge)
+
+        orphans_removed = edges_before_orphan - len(valid_edges)
+        edges = valid_edges
+        edges_removed += orphans_removed
+        logger.info(f"Removed {orphans_removed} orphan edges, {len(edges)} edges remaining")
+
+        # Resolve common names for all nodes in filtered edges
+        if progress_callback:
+            progress_callback("Resolving common names for nodes...")
+
+        unique_nodes = set()
+        for edge in edges:
+            unique_nodes.add(edge.get('subject', ''))
+            unique_nodes.add(edge.get('object', ''))
+        unique_nodes.discard('')
+
+        curie_to_name = self._resolve_curie_names(list(unique_nodes))
+
+        # Merge with BP names from Stage 1 if available
+        if bp_metadata and 'bp_names' in bp_metadata:
+            curie_to_name.update(bp_metadata['bp_names'])
+
+        # Create CURIE to symbol reverse mapping for labels
+        curie_to_symbol = {curie: symbol for symbol, curie in gene_curie_map.items()}
+
+        # Create response
+        response = TRAPIResponse(
+            query_id=datetime.now().strftime("%Y%m%d_%H%M%S"),
+            input_genes=input_gene_curies,
+            target_disease=disease_curie,
+            edges=edges,
+            metadata={
+                "gene_symbols": gene_symbols,
+                "normalized_genes": gene_curie_map,
+                "curie_to_symbol": curie_to_symbol,
+                "curie_to_name": curie_to_name,
+                "query_pattern": "gene-intermediate-disease-bp",
+                "intermediate_categories": intermediate_categories,
+                "bioprocess_endpoints": bp_curies,
+                "bioprocess_count": len(bp_curies),
+                "predicate_min_depth": predicate_min_depth,
+                "exclude_literature": exclude_literature,
+                "exclude_coexpression": exclude_coexpression,
+                "exclude_homology": exclude_homology,
+                "edges_before_filter": edges_before_filter,
+                "edges_removed": edges_removed,
+                "valid_intermediates": len(valid_intermediates),
+                "api_timings": [asdict(t) for t in api_timings],
+                "total_query_duration": round(query_duration, 3),
+                "stage1_metadata": bp_metadata,
+            },
+            apis_queried=len(selected_APIs),
+            apis_succeeded=successful_count,
+        )
+
+        logger.info(f"Stage 2 complete: {len(edges)} edges from {response.apis_succeeded}/{response.apis_queried} APIs")
 
         # Cache response
         cache_file = self._cache_response(response)

@@ -29,6 +29,14 @@ class Settings(BaseModel):
     trapi_max_workers: int = Field(default=5, description="Parallel query workers")
     trapi_cache_ttl: int = Field(default=86400 * 7, description="Cache TTL in seconds (default: 7 days)")
 
+    # Disease-BiologicalProcess query settings
+    disease_bp_timeout: int = Field(
+        default=600, description="Timeout for Disease→BP queries in seconds (extended for 2-stage pattern)"
+    )
+    use_cached_bp_default: bool = Field(
+        default=True, description="Default: use cached BiologicalProcesses if available"
+    )
+
     # Graph settings
     max_viz_edges: int = Field(default=50, description="Max edges to visualize")
     min_edges_per_gene: int = Field(default=2, description="Min edges per query gene in viz")

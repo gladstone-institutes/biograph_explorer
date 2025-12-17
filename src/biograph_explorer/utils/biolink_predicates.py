@@ -46,6 +46,50 @@ GRANULARITY_PRESETS = {
     },
 }
 
+# ============================================================================
+# Disease → BiologicalProcess Predicate Filtering
+# ============================================================================
+# Based on analysis in notebooks/disease_bioprocess_exploration.ipynb
+# These predicates provide mechanistic/causal relationships vs text mining noise
+
+# Informative predicates to KEEP for Disease → BiologicalProcess queries
+DISEASE_BP_INFORMATIVE_PREDICATES = [
+    "biolink:affects",
+    "biolink:causes",
+    "biolink:disrupts",
+    "biolink:disease_has_basis_in",
+    "biolink:related_to",
+    "biolink:correlated_with",
+    "biolink:contributes_to",
+    "biolink:positively_correlated_with",
+    "biolink:negatively_correlated_with",
+    "biolink:positively_associated_with",
+    "biolink:negatively_associated_with",
+]
+
+# Noise predicates to FILTER OUT for Disease → BiologicalProcess queries
+# These are mostly text mining artifacts or overly broad relationships
+DISEASE_BP_NOISE_PREDICATES = [
+    "biolink:occurs_together_in_literature_with",  # 60%+ of results - text mining
+    "biolink:manifestation_of",  # Too broad
+    "biolink:coexists_with",  # Non-specific
+    "biolink:actively_involves",  # Often duplicates
+]
+
+# Default intermediate categories for Gene → [Intermediate] → BiologicalProcess queries
+# Based on MetaKG exploration in notebooks/intermediate_bioprocess_exploration.ipynb
+# All have high coverage (5+ APIs) on both Gene→Intermediate and Intermediate→BP hops
+DEFAULT_BP_INTERMEDIATE_CATEGORIES = [
+    "biolink:ChemicalEntity",
+    "biolink:Protein",
+    "biolink:Gene",
+    "biolink:Pathway",
+    "biolink:MolecularActivity",
+    "biolink:CellularComponent",
+    "biolink:AnatomicalEntity",
+    "biolink:PhenotypicFeature",
+]
+
 # Module-level cache to avoid reloading
 _predicate_depths_cache: Optional[Dict[str, int]] = None
 _predicates_cache: Optional[Dict[str, Dict]] = None
@@ -255,7 +299,9 @@ def get_predicate_depths() -> Dict[str, int]:
 def filter_predicates_by_granularity(
     predicates: List[str],
     min_depth: int,
-    exclude_literature: bool = False
+    exclude_literature: bool = False,
+    exclude_coexpression: bool = False,
+    exclude_homology: bool = False,
 ) -> List[str]:
     """Filter predicate list by granularity level.
 
@@ -263,6 +309,8 @@ def filter_predicates_by_granularity(
         predicates: List of predicates (may include biolink: prefix)
         min_depth: Minimum depth required (0 = all, 1 = exclude root, etc.)
         exclude_literature: If True, exclude predicates with 'literature' in name
+        exclude_coexpression: If True, exclude 'coexpressed_with' predicate
+        exclude_homology: If True, exclude 'homologous_to' and related predicates
 
     Returns:
         Filtered list of predicates (preserving original format)
@@ -284,12 +332,25 @@ def filter_predicates_by_granularity(
         if exclude_literature and "literature" in pred_name.lower():
             continue
 
+        # Check coexpression exclusion
+        if exclude_coexpression and "coexpressed" in pred_name.lower():
+            continue
+
+        # Check homology exclusion (covers homologous_to, orthologous_to, paralogous_to, xenologous_to)
+        if exclude_homology and ("homolog" in pred_name.lower() or pred_name.lower().endswith("logous_to")):
+            continue
+
         result.append(pred)
 
     return result
 
 
-def get_allowed_predicates_for_display(min_depth: int, exclude_literature: bool = False) -> List[str]:
+def get_allowed_predicates_for_display(
+    min_depth: int,
+    exclude_literature: bool = False,
+    exclude_coexpression: bool = False,
+    exclude_homology: bool = False,
+) -> List[str]:
     """Get list of predicates allowed at given granularity level.
 
     For UI display purposes - shows what predicates will be included.
@@ -297,6 +358,8 @@ def get_allowed_predicates_for_display(min_depth: int, exclude_literature: bool 
     Args:
         min_depth: Minimum depth required
         exclude_literature: If True, exclude literature co-occurrence
+        exclude_coexpression: If True, exclude 'coexpressed_with' predicate
+        exclude_homology: If True, exclude 'homologous_to' and related predicates
 
     Returns:
         Sorted list of allowed predicate names (human-readable format)
@@ -307,6 +370,10 @@ def get_allowed_predicates_for_display(min_depth: int, exclude_literature: bool 
     for pred, depth in depths.items():
         if depth >= min_depth:
             if exclude_literature and "literature" in pred.lower():
+                continue
+            if exclude_coexpression and "coexpressed" in pred.lower():
+                continue
+            if exclude_homology and ("homolog" in pred.lower() or pred.lower().endswith("logous_to")):
                 continue
             allowed.append(pred)
 
@@ -361,3 +428,44 @@ def get_predicate_info(predicate_name: str) -> Optional[Dict]:
         return info
 
     return None
+
+
+def filter_disease_bp_predicates(
+    edges: List[Dict],
+    use_informative_only: bool = True,
+) -> List[Dict]:
+    """Filter Disease → BiologicalProcess edges to informative predicates.
+
+    Args:
+        edges: List of TRAPI edge dictionaries with 'predicate' key
+        use_informative_only: If True, keep only informative predicates.
+                              If False, return all edges unfiltered.
+
+    Returns:
+        Filtered list of edges
+    """
+    if not use_informative_only:
+        return edges
+
+    # Normalize informative predicates for comparison
+    informative_set = set()
+    for pred in DISEASE_BP_INFORMATIVE_PREDICATES:
+        # Store both with and without prefix for matching
+        normalized = pred.replace("biolink:", "").lower()
+        informative_set.add(normalized)
+        informative_set.add(f"biolink:{normalized}")
+
+    filtered = []
+    for edge in edges:
+        predicate = edge.get("predicate", "")
+        # Normalize for comparison
+        pred_normalized = predicate.replace("biolink:", "").lower()
+
+        if pred_normalized in informative_set or predicate.lower() in informative_set:
+            filtered.append(edge)
+
+    logger.debug(
+        f"Disease-BP predicate filter: {len(edges)} -> {len(filtered)} edges "
+        f"({len(edges) - len(filtered)} removed)"
+    )
+    return filtered

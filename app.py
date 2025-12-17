@@ -152,11 +152,16 @@ else:  # Load Cached Query
 
                     curie_to_symbol = cached_response.metadata.get("curie_to_symbol", {})
                     curie_to_name = cached_response.metadata.get("curie_to_name", {})
+
+                    # Get disease-associated BP CURIEs for triangle rendering (if this was a Disease BioProcesses query)
+                    disease_bp_curies = cached_response.metadata.get("bioprocess_endpoints", None)
+
                     kg = builder.build_from_trapi_edges(
                         cached_response.edges,
                         cached_response.input_genes,
                         curie_to_symbol,
-                        curie_to_name
+                        curie_to_name,
+                        disease_bp_curies=disease_bp_curies,
                     )
 
                     progress_bar.progress(60)
@@ -286,25 +291,31 @@ query_pattern = st.sidebar.radio(
     options=[
         "1-hop (Neighborhood Discovery)",
         "2-hop (Gene → Intermediate → Disease)",
+        "2-hop (Gene → Intermediate → Disease BioProcesses)",
     ],
-    index=1,  # Default to 2-hop
-    help="1-hop: direct connections. 2-hop: targets between genes and disease."
+    index=1,  # Default to 2-hop Disease
+    help="1-hop: direct connections. 2-hop to Disease: targets between genes and disease. 2-hop to BioProcesses: targets between genes and disease-associated biological processes."
 )
+
+# Intermediate type options for the query patterns
+INTERMEDIATE_OPTIONS = [
+    "Protein",
+    "ChemicalEntity (Drugs/Metabolites)",
+    "Gene",
+    "PhenotypicFeature",
+    "Pathway",
+    "BiologicalProcess",
+    "AnatomicalEntity",
+    "MolecularActivity",
+    "CellularComponent",
+]
 
 if query_pattern == "2-hop (Gene → Intermediate → Disease)":
     st.sidebar.markdown("**Path:** Gene → **[Intermediate]** → Disease")
 
     intermediate_types = st.sidebar.multiselect(
         "Intermediate Entity Types",
-        options=[
-            "Protein",
-            "ChemicalEntity (Drugs/Metabolites)",
-            "Gene",
-            "PhenotypicFeature",
-            "Pathway",
-            "BiologicalProcess",
-            "AnatomicalEntity",
-        ],
+        options=INTERMEDIATE_OPTIONS,
         default=["Protein", "ChemicalEntity (Drugs/Metabolites)", "Gene"],
         help="Select intermediate entity types for 2-hop query. These are potential therapeutic targets."
     )
@@ -312,9 +323,43 @@ if query_pattern == "2-hop (Gene → Intermediate → Disease)":
     if not disease_curie:
         st.sidebar.warning(":material/warning: Disease CURIE required for 2-hop queries")
 
+elif query_pattern == "2-hop (Gene → Intermediate → Disease BioProcesses)":
+    st.sidebar.markdown("**Path:** Gene → **[Intermediate]** → Disease-associated BiologicalProcess")
+
+    intermediate_types = st.sidebar.multiselect(
+        "Intermediate Entity Types",
+        options=INTERMEDIATE_OPTIONS,
+        default=["Protein", "ChemicalEntity (Drugs/Metabolites)", "Gene", "Pathway", "MolecularActivity"],
+        help="Select intermediate entity types for 2-hop query. These connect genes to disease-associated biological processes."
+    )
+
+    if not disease_curie:
+        st.sidebar.warning(":material/warning: Disease CURIE required for BiologicalProcess queries")
+
+    # BiologicalProcess Discovery settings
+    with st.sidebar.expander("BiologicalProcess Discovery Settings", expanded=False):
+        filter_bp_predicates = st.checkbox(
+            "Filter to informative predicates",
+            value=True,
+            help="Exclude text mining noise like 'occurs_together_in_literature_with' (removes ~85% of noisy edges)"
+        )
+
+        use_cached_bp = st.checkbox(
+            "Use cached BiologicalProcesses if available",
+            value=True,
+            help="Skip Stage 1 discovery if we have cached BiologicalProcesses for this disease"
+        )
+
 else:
     st.sidebar.markdown("**Path:** Gene → **[Any Connection]**")
     intermediate_types = []  # Empty for 1-hop
+    filter_bp_predicates = True  # Default
+    use_cached_bp = True  # Default
+
+# Ensure variables are defined for non-BP query patterns
+if query_pattern != "2-hop (Gene → Intermediate → Disease BioProcesses)":
+    filter_bp_predicates = True
+    use_cached_bp = True
 
 # Predicate Granularity Section
 st.sidebar.markdown("### Predicate Filtering")
@@ -332,10 +377,22 @@ exclude_literature = st.sidebar.checkbox(
     help="Exclude 'occurs_together_in_literature_with' predicate"
 )
 
+exclude_coexpression = st.sidebar.checkbox(
+    "Exclude coexpression",
+    value=False,
+    help="Exclude 'coexpressed_with' predicate"
+)
+
+exclude_homology = st.sidebar.checkbox(
+    "Exclude homology",
+    value=True,
+    help="Exclude 'homologous_to', 'orthologous_to', 'paralogous_to', 'xenologous_to' predicates"
+)
+
 # Show included predicates in expander
 with st.sidebar.expander("View included predicates"):
     min_depth = GRANULARITY_PRESETS[predicate_preset]["min_depth"]
-    allowed = get_allowed_predicates_for_display(min_depth, exclude_literature)
+    allowed = get_allowed_predicates_for_display(min_depth, exclude_literature, exclude_coexpression, exclude_homology)
     st.write(f"**{len(allowed)}** predicates included:")
     # Display all predicates in a scrollable text area
     predicate_display = "\n".join(sorted(allowed))
@@ -415,6 +472,8 @@ if run_query:
             "BiologicalProcess": "biolink:BiologicalProcess",
             "Gene": "biolink:Gene",
             "AnatomicalEntity": "biolink:AnatomicalEntity",
+            "MolecularActivity": "biolink:MolecularActivity",
+            "CellularComponent": "biolink:CellularComponent",
         }
 
         def progress_callback(msg):
@@ -424,7 +483,69 @@ if run_query:
         predicate_min_depth = GRANULARITY_PRESETS[predicate_preset]["min_depth"]
 
         # Handle different query patterns
-        if query_pattern == "2-hop (Gene → Intermediate → Disease)" and intermediate_types:
+        if query_pattern == "2-hop (Gene → Intermediate → Disease BioProcesses)" and intermediate_types:
+            # New: 2-hop query to disease-associated BiologicalProcesses
+            intermediate_categories = [type_mapping[t] for t in intermediate_types if t in type_mapping]
+
+            if not disease_curie:
+                raise ValidationError("Disease CURIE is required for BiologicalProcess queries")
+
+            status_text.text("Stage 1: Discovering disease-associated BiologicalProcesses...")
+            progress_bar.progress(15)
+
+            # Check for cached BP results if use_cached_bp is enabled
+            bp_curies = None
+            bp_metadata = None
+
+            if use_cached_bp:
+                cached_bp_results = client.list_cached_disease_bp_results(disease_curie)
+                if cached_bp_results:
+                    # Use the most recent cache
+                    most_recent = cached_bp_results[0]
+                    try:
+                        bp_curies, bp_metadata = client.load_cached_disease_bp_results(most_recent['path'])
+                        st.info(f":material/cached: Using cached BiologicalProcesses: {len(bp_curies)} BPs from {most_recent['timestamp_str']}")
+                    except Exception as e:
+                        st.warning(f":material/warning: Could not load cached BPs: {e}. Running fresh discovery...")
+                        bp_curies = None
+                        bp_metadata = None
+
+            # Run the full 2-stage query
+            response = client.query_gene_to_bioprocesses(
+                validated_genes,
+                disease_curie=disease_curie,
+                intermediate_categories=intermediate_categories,
+                bp_curies=bp_curies,
+                bp_metadata=bp_metadata,
+                filter_disease_bp=filter_bp_predicates,
+                predicate_min_depth=predicate_min_depth,
+                exclude_literature=exclude_literature,
+                exclude_coexpression=exclude_coexpression,
+                exclude_homology=exclude_homology,
+                timeout_override=600,  # Extended timeout for 2-stage query
+                progress_callback=progress_callback,
+            )
+
+            progress_bar.progress(60)
+
+            # Show Stage 1 summary
+            stage1_meta = response.metadata.get("stage1_metadata", {})
+            bp_count = response.metadata.get("bioprocess_count", 0)
+            edges_before = stage1_meta.get("total_edges_before_filter", 0)
+            edges_after = stage1_meta.get("total_edges_after_filter", 0)
+
+            if edges_before > 0 and filter_bp_predicates:
+                st.info(f":material/filter_alt: Stage 1: Found {bp_count} BiologicalProcesses (filtered {edges_before} → {edges_after} edges)")
+
+            edges_removed = response.metadata.get("edges_removed", 0)
+            filter_info = f" (filtered {edges_removed} vague relationships)" if edges_removed > 0 else ""
+            intermediate_cats = response.metadata.get("intermediate_categories", [])
+            intermediate_str = ", ".join([c.replace("biolink:", "") for c in intermediate_cats])
+
+            st.success(f":material/check_circle: 2-hop query: Found {len(response.edges)} edges from {response.apis_succeeded}/{response.apis_queried} APIs{filter_info}")
+            st.info(f":material/timeline: Query: Gene → [{intermediate_str}] → {bp_count} Disease BiologicalProcesses")
+
+        elif query_pattern == "2-hop (Gene → Intermediate → Disease)" and intermediate_types:
             # Standard 2-hop query
             intermediate_categories = [type_mapping[t] for t in intermediate_types if t in type_mapping]
 
@@ -440,6 +561,8 @@ if run_query:
                 intermediate_categories=intermediate_categories,
                 predicate_min_depth=predicate_min_depth,
                 exclude_literature=exclude_literature,
+                exclude_coexpression=exclude_coexpression,
+                exclude_homology=exclude_homology,
                 progress_callback=progress_callback
             )
 
@@ -463,6 +586,8 @@ if run_query:
                 intermediate_categories=None,
                 predicate_min_depth=predicate_min_depth,
                 exclude_literature=exclude_literature,
+                exclude_coexpression=exclude_coexpression,
+                exclude_homology=exclude_homology,
                 progress_callback=progress_callback
             )
 
@@ -480,11 +605,17 @@ if run_query:
         curie_to_symbol = response.metadata.get("curie_to_symbol", {})
         curie_to_name = response.metadata.get("curie_to_name", {})
 
+        # Get disease-associated BP CURIEs for triangle rendering (only for Disease BioProcesses pattern)
+        disease_bp_curies = None
+        if query_pattern == "2-hop (Gene → Intermediate → Disease BioProcesses)":
+            disease_bp_curies = response.metadata.get("bioprocess_endpoints", [])
+
         kg = builder.build_from_trapi_edges(
             response.edges,
             response.input_genes,
             curie_to_symbol,
             curie_to_name,
+            disease_bp_curies=disease_bp_curies,
         )
         
         # Calculate gene frequency
@@ -523,9 +654,9 @@ if st.session_state.graph:
     st.divider()
     
     # Tabs for different views
-    tab1, tab2, tab3 = st.tabs([":material/analytics: Overview", ":material/hub: Network", ":material/group_work: Communities"])
-    
-    with tab1:
+    tab_network, tab_overview, tab_communities = st.tabs([":material/hub: Network", ":material/analytics: Overview", ":material/group_work: Communities"])
+
+    with tab_overview:
         st.header("Analysis Overview")
         
         # Key metrics
@@ -570,7 +701,7 @@ if st.session_state.graph:
         else:
             st.info("No node category data available")
     
-    with tab2:
+    with tab_network:
         st.header("Knowledge Graph Visualization")
 
         # Visualization controls - Row 1
@@ -689,11 +820,32 @@ if st.session_state.graph:
                     break
 
             if selected_community:
-                # Create subgraph with only nodes from this cluster
-                cluster_nodes = selected_community.nodes
-                display_graph = st.session_state.graph.subgraph(cluster_nodes).copy()
+                # Get cluster nodes
+                cluster_nodes = set(selected_community.nodes)
 
-                st.info(f":material/info: Showing Cluster {cluster_id}: {display_graph.number_of_nodes()} nodes, {display_graph.number_of_edges()} edges")
+                # Include ALL nodes connected to ANY cluster node
+                # This captures both upstream (query genes) and downstream (disease BPs) connections
+                nodes_to_include = set(cluster_nodes)
+                for node in cluster_nodes:
+                    # Add all neighbors (both directions)
+                    nodes_to_include.update(st.session_state.graph.predecessors(node))
+                    nodes_to_include.update(st.session_state.graph.successors(node))
+
+                # Create subgraph with expanded node set
+                display_graph = st.session_state.graph.subgraph(nodes_to_include).copy()
+
+                # Mark which nodes are "native" to cluster vs "connected" (for opacity styling)
+                for node in display_graph.nodes():
+                    display_graph.nodes[node]['in_cluster'] = node in cluster_nodes
+
+                # Count nodes
+                native_count = len(cluster_nodes & set(display_graph.nodes()))
+                connected_count = display_graph.number_of_nodes() - native_count
+
+                if connected_count > 0:
+                    st.info(f":material/info: Showing Cluster {cluster_id}: {native_count} cluster nodes + {connected_count} connected nodes, {display_graph.number_of_edges()} edges")
+                else:
+                    st.info(f":material/info: Showing Cluster {cluster_id}: {native_count} nodes, {display_graph.number_of_edges()} edges")
             else:
                 display_graph = st.session_state.graph
         else:
@@ -735,7 +887,7 @@ if st.session_state.graph:
         else:
             st.error("Failed to render visualization")
     
-    with tab3:
+    with tab_communities:
         st.header("Community Detection Results")
         
         st.write(f"Detected **{st.session_state.clustering_results.num_communities} communities** using Louvain algorithm")

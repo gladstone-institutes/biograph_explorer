@@ -28,16 +28,20 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # Color scheme for node categories
+# Colors chosen for visual distinction and accessibility
 CATEGORY_COLORS = {
-    "Gene": "#1C91D4",
-    "Disease": "#B14380", 
-    "Protein": "#00F6B3",
-    "ChemicalEntity": "#D55E00",
-    "BiologicalProcess": "#D5C711",
-    "AnatomicalEntity": "#c9246f",
-    "Pathway": "#D5C711",
-    "Cluster": "#005F45",
-    "Other": "#666666",
+    "Gene": "#1C91D4",           # Blue
+    "Disease": "#B14380",        # Magenta/Pink
+    "Protein": "#00F6B3",        # Cyan/Teal
+    "ChemicalEntity": "#D55E00", # Orange
+    "BiologicalProcess": "#D5C711",  # Yellow/Gold
+    "AnatomicalEntity": "#c9246f",   # Rose/Pink
+    "Pathway": "#8B5CF6",        # Purple (distinct from BiologicalProcess)
+    "MolecularActivity": "#10B981",  # Emerald Green
+    "CellularComponent": "#F97316",  # Amber/Orange-Red
+    "PhenotypicFeature": "#EC4899",  # Pink/Fuchsia
+    "Cluster": "#005F45",        # Dark Green
+    "Other": "#666666",          # Gray
 }
 # Get the absolute path to the assets directory
 _ASSETS_DIR = Path(__file__).parent.parent / "assets"
@@ -63,6 +67,7 @@ def _svg_to_data_uri(svg_path: Path) -> str:
 
 
 # SVG icons for node categories (converted to data URIs)
+# New categories use existing icons that semantically match their type
 CATEGORY_ICONS = {
     "Gene": _svg_to_data_uri(_ASSETS_DIR / "genetics.svg"),
     "Disease": _svg_to_data_uri(_ASSETS_DIR / "sick.svg"),
@@ -71,6 +76,9 @@ CATEGORY_ICONS = {
     "Pathway": _svg_to_data_uri(_ASSETS_DIR / "arrow_split.svg"),
     "BiologicalProcess": _svg_to_data_uri(_ASSETS_DIR / "arrow_split.svg"),
     "AnatomicalEntity": _svg_to_data_uri(_ASSETS_DIR / "immunology.svg"),
+    "MolecularActivity": _svg_to_data_uri(_ASSETS_DIR / "experiment.svg"),  # Chemical/activity
+    "CellularComponent": _svg_to_data_uri(_ASSETS_DIR / "immunology.svg"),  # Cell-related
+    "PhenotypicFeature": _svg_to_data_uri(_ASSETS_DIR / "health_metrics.svg"),  # Phenotype/health
     "Cluster": None,
     "Other": None,
 }
@@ -235,11 +243,16 @@ def prepare_cytoscape_elements(
         is_query_gene = node_attrs.get("is_query_gene", False)
         node_element["data"]["is_query_gene"] = is_query_gene
 
-        # Set shape based on query status (triangles for query nodes, circles for others)
-        node_element["data"]["node_shape"] = "triangle" if is_query_gene else "ellipse"
+        # Check if this is a disease-associated BiologicalProcess (from Stage 1 query)
+        is_disease_bp = node_attrs.get("is_disease_associated_bp", False)
+        node_element["data"]["is_disease_associated_bp"] = is_disease_bp
+
+        # Set shape: triangles for query genes AND disease-associated BPs (query-derived nodes)
+        use_triangle = is_query_gene or is_disease_bp
+        node_element["data"]["node_shape"] = "triangle" if use_triangle else "ellipse"
 
         # Adjust icon sizing/position for triangles (icons need to be smaller and shifted down)
-        if is_query_gene:
+        if use_triangle:
             node_element["data"]["bg_width"] = "55%"
             node_element["data"]["bg_height"] = "55%"
             node_element["data"]["bg_position_y"] = "80%"
@@ -259,8 +272,8 @@ def prepare_cytoscape_elements(
             # Uniform sizing - all nodes same size
             node_size = base_node_size
 
-        # Query genes (triangles) get larger size (10% bigger, minimum base_node_size)
-        if is_query_gene:
+        # Query-derived nodes (triangles) get larger size (10% bigger, minimum base_node_size)
+        if use_triangle:
             node_size = max(node_size * 1.1, base_node_size)
 
         node_element["data"]["size"] = round(node_size, 1)
@@ -274,6 +287,12 @@ def prepare_cytoscape_elements(
         node_element["data"]["pagerank"] = node_attrs.get("pagerank", 0)
         node_element["data"]["betweenness"] = node_attrs.get("betweenness", 0)
         node_element["data"]["degree"] = graph.degree(node_id)
+
+        # Add cluster membership flag (for opacity styling when viewing individual clusters)
+        in_cluster = node_attrs.get("in_cluster", True)
+        node_element["data"]["in_cluster"] = in_cluster
+        # Reduce opacity for nodes from other clusters (connected but not native)
+        node_element["data"]["opacity"] = 1.0 if in_cluster else 0.6
 
     # Enrich edges with custom attributes
     for idx, edge_element in enumerate(elements["edges"]):
@@ -509,6 +528,7 @@ def create_node_styles(graph: nx.DiGraph) -> List["NodeStyle"]:
                         "background-width": "data(bg_width)",
                         "background-height": "data(bg_height)",
                         "background-position-y": "data(bg_position_y)",
+                        "opacity": "data(opacity)",
                         **label_styles,
                     }
                 )
@@ -523,6 +543,7 @@ def create_node_styles(graph: nx.DiGraph) -> List["NodeStyle"]:
                         "width": "data(size)",
                         "height": "data(size)",
                         "shape": "data(node_shape)",
+                        "opacity": "data(opacity)",
                         **label_styles,
                     }
                 )

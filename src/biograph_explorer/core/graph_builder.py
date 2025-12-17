@@ -59,6 +59,7 @@ class GraphBuilder:
         query_gene_curies: List[str],
         curie_to_symbol: Optional[Dict[str, str]] = None,
         curie_to_name: Optional[Dict[str, str]] = None,
+        disease_bp_curies: Optional[List[str]] = None,
     ) -> KnowledgeGraph:
         """Build NetworkX DiGraph from TRAPI edge list.
 
@@ -70,6 +71,9 @@ class GraphBuilder:
             curie_to_symbol: Optional mapping of gene CURIEs to original symbols
             curie_to_name: Optional mapping of CURIEs to human-readable names.
                 If provided, skips network lookup for names (uses cached names).
+            disease_bp_curies: Optional list of BiologicalProcess CURIEs that are
+                associated with the disease (from Stage 1 query). These will be
+                marked with is_disease_associated_bp=True for triangle rendering.
 
         Returns:
             KnowledgeGraph with NetworkX DiGraph and metadata
@@ -153,7 +157,7 @@ class GraphBuilder:
 
         # Add node attributes
         self._add_node_attributes(
-            graph, query_gene_curies, curie_to_label, curie_to_symbol
+            graph, query_gene_curies, curie_to_label, curie_to_symbol, disease_bp_curies
         )
 
         # Count categories
@@ -182,6 +186,7 @@ class GraphBuilder:
         query_gene_curies: List[str],
         curie_to_label: Dict[str, str],
         curie_to_symbol: Dict[str, str],
+        disease_bp_curies: Optional[List[str]] = None,
     ) -> None:
         """Add rich attributes to graph nodes.
 
@@ -190,6 +195,7 @@ class GraphBuilder:
             - original_symbol: Original gene symbol for query genes
             - category: biolink category (Gene, Disease, Protein, etc.)
             - is_query_gene: Boolean flag for input genes
+            - is_disease_associated_bp: Boolean flag for BiologicalProcesses from disease query
             - curie: Node identifier
 
         Extracted from notebook cell 18.
@@ -199,7 +205,10 @@ class GraphBuilder:
             query_gene_curies: List of input gene CURIEs
             curie_to_label: Dictionary mapping CURIEs to labels
             curie_to_symbol: Dictionary mapping CURIEs to original gene symbols
+            disease_bp_curies: Optional list of disease-associated BiologicalProcess CURIEs
         """
+        disease_bp_set = set(disease_bp_curies or [])
+
         for node in graph.nodes():
             # Add label
             graph.nodes[node]["label"] = curie_to_label.get(node, node)
@@ -208,6 +217,9 @@ class GraphBuilder:
             # Add original symbol for query genes
             if node in curie_to_symbol:
                 graph.nodes[node]["original_symbol"] = curie_to_symbol[node]
+
+            # Mark disease-associated BiologicalProcesses (for triangle rendering)
+            graph.nodes[node]["is_disease_associated_bp"] = node in disease_bp_set
 
             # Classify category based on CURIE prefix
             if node in query_gene_curies:
