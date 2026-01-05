@@ -983,6 +983,21 @@ if st.session_state.graph:
                 help="Number of top intermediate nodes to display, ranked by connections to query genes"
             )
 
+        with col4:
+            # Category filter dropdown
+            if st.session_state.knowledge_graph and st.session_state.knowledge_graph.node_categories:
+                all_categories = list(st.session_state.knowledge_graph.node_categories.keys())
+                all_categories.sort()
+            else:
+                all_categories = []
+
+            category_filter = st.selectbox(
+                "Intermediate Category",
+                options=["All Categories"] + all_categories,
+                index=0,
+                help="Filter to show only intermediates of a specific type"
+            )
+
         # Visualization controls - Row 2 (Node sizing)
         col5, col6, col7 = st.columns([2, 2, 4])
 
@@ -1057,7 +1072,7 @@ if st.session_state.graph:
                         st.caption(f":material/filter_list: {active_count} filter(s) active - connected nodes will also be shown")
 
         # Render streamlit-cytoscape visualization
-        from biograph_explorer.ui.network_viz import render_network_visualization, filter_graph_by_annotations
+        from biograph_explorer.ui.network_viz import render_network_visualization, filter_graph_by_annotations, filter_graph_by_category
         from streamlit_cytoscape import streamlit_cytoscape
 
         display_graph = st.session_state.graph
@@ -1081,6 +1096,32 @@ if st.session_state.graph:
                         f":material/filter_alt: Annotation filter: {matched_count} matched nodes + "
                         f"{post_filter_count - matched_count} connected nodes shown"
                     )
+
+        # Apply category filter if not "All Categories"
+        if category_filter and category_filter != "All Categories":
+            pre_cat_count = display_graph.number_of_nodes()
+            display_graph = filter_graph_by_category(
+                display_graph,
+                category_filter,
+                st.session_state.query_genes,
+                st.session_state.disease_curie
+            )
+            post_cat_count = display_graph.number_of_nodes()
+            if post_cat_count < pre_cat_count:
+                # Count intermediates and connected query genes separately
+                query_gene_set = set(st.session_state.query_genes) if st.session_state.query_genes else set()
+                category_intermediate_count = sum(
+                    1 for node in display_graph.nodes()
+                    if node not in query_gene_set
+                    and node != st.session_state.disease_curie
+                    and display_graph.nodes[node].get('category') == category_filter
+                )
+                connected_query_gene_count = sum(
+                    1 for node in display_graph.nodes()
+                    if node in query_gene_set
+                )
+                gene_suffix = f" + {connected_query_gene_count} connected query genes" if connected_query_gene_count > 0 else ""
+                st.info(f":material/category: Showing {category_intermediate_count} {category_filter} intermediates{gene_suffix}")
 
         # Prepare visualization data
         viz_data = render_network_visualization(
@@ -1109,7 +1150,7 @@ if st.session_state.graph:
             else:
                 filter_hash = 0
 
-            cytoscape_key = f"biograph_network_{layout}_{filter_hash}"
+            cytoscape_key = f"biograph_network_{layout}_{filter_hash}_{category_filter}"
 
             # Render component
             # When debug_mode is True, show all attributes (hide_underscore_attrs=False)

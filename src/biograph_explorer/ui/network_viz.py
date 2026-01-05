@@ -1096,3 +1096,66 @@ def filter_graph_by_annotations(
     )
 
     return filtered_graph
+
+
+def filter_graph_by_category(
+    graph: nx.DiGraph,
+    selected_category: str,
+    query_genes: List[str],
+    disease_curie: Optional[str] = None,
+) -> nx.DiGraph:
+    """Filter graph to show only intermediates of the selected category.
+
+    Strategy:
+    1. Find all nodes matching the selected category (intermediates)
+    2. Include query genes ONLY if they connect to at least one category node
+    3. Always include disease node if present and connected
+    4. Preserve edges between included nodes
+
+    Args:
+        graph: Full NetworkX graph
+        selected_category: Category to filter by (e.g., "Protein", "BiologicalProcess")
+        query_genes: Query gene CURIEs (included only if connected to category)
+        disease_curie: Optional disease CURIE (always included if present)
+
+    Returns:
+        Filtered subgraph with only selected category intermediates
+    """
+    if not selected_category:
+        return graph
+
+    query_gene_set = set(query_genes) if query_genes else set()
+
+    # First, find all nodes matching the selected category
+    category_nodes = set()
+    for node in graph.nodes():
+        if graph.nodes[node].get('category') == selected_category:
+            category_nodes.add(node)
+
+    if not category_nodes:
+        logger.warning(f"No nodes match category '{selected_category}'")
+        return graph
+
+    nodes_to_include = set(category_nodes)
+
+    # Include query genes only if they connect to at least one category node
+    for query_gene in query_gene_set:
+        if query_gene not in graph:
+            continue
+        # Check if this query gene has any edge to/from a category node
+        neighbors = set(graph.predecessors(query_gene)) | set(graph.successors(query_gene))
+        if neighbors & category_nodes:
+            nodes_to_include.add(query_gene)
+
+    # Always include disease node if present
+    if disease_curie and disease_curie in graph:
+        nodes_to_include.add(disease_curie)
+
+    filtered_graph = graph.subgraph(nodes_to_include).copy()
+
+    logger.info(
+        f"Category filter '{selected_category}': {filtered_graph.number_of_nodes()} nodes, "
+        f"{filtered_graph.number_of_edges()} edges"
+    )
+
+    return filtered_graph
