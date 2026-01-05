@@ -3,7 +3,6 @@
 Handles:
 - Node label formatting (truncate long names, add metadata)
 - Edge label formatting (predicates → human-readable)
-- Clustering results formatting for UI tables
 - Export formatting (HTML, JSON)
 
 Phase 2 Status: Stub created
@@ -51,24 +50,6 @@ def format_edge_label(predicate: str) -> str:
     if predicate.startswith("biolink:"):
         predicate = predicate[8:]
     return predicate.replace("_", " ")
-
-
-def format_clustering_results(
-    results: Any,
-    top_n: int = 10,
-) -> Dict[str, Any]:
-    """Format clustering results for UI display.
-
-    Args:
-        results: ClusteringResults object
-        top_n: Number of top nodes to include per category
-
-    Returns:
-        Dictionary with formatted results for display
-
-    TODO: Implement clustering results formatting
-    """
-    raise NotImplementedError("TODO: Implement clustering results formatting")
 
 
 def format_convergent_nodes_table(

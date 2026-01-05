@@ -19,16 +19,14 @@ import networkx as nx
 
 def render_rag_chat(
     graph: nx.DiGraph,
-    clustering_results: Any,
 ) -> None:
     """Render RAG chat interface.
 
     Args:
         graph: NetworkX knowledge graph
-        clustering_results: ClusteringResults object
 
     Example (Phase 3):
-        >>> render_rag_chat(graph, results)
+        >>> render_rag_chat(graph)
         # User can ask questions, get answers with citations
 
     Phase 3: Not implemented

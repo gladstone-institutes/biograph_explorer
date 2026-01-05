@@ -12,7 +12,7 @@ Features:
 Phase 2 Status: Implemented with streamlit-cytoscape
 """
 
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any
 import networkx as nx
 from networkx.readwrite import json_graph
 from pathlib import Path
@@ -988,84 +988,6 @@ def get_node_details(node_id: str, graph: nx.DiGraph) -> Dict[str, Any]:
         "total_edges": len(in_edges) + len(out_edges),
         "knowledge_sources": list(all_sources),
     }
-
-
-def create_clustered_graph(
-    graph: nx.DiGraph, clustering_results, query_genes: List[str]
-) -> nx.DiGraph:
-    """Create a meta-graph where nodes represent clusters.
-
-    Args:
-        graph: Original NetworkX graph
-        clustering_results: ClusteringResults from clustering_engine
-        query_genes: List of query gene node IDs
-
-    Returns:
-        Meta-graph with cluster nodes
-    """
-    meta_graph = nx.DiGraph()
-
-    # Create a node for each community
-    for community in clustering_results.communities:
-        cluster_id = f"cluster_{community.community_id}"
-
-        # Get cluster statistics
-        cluster_nodes = community.nodes
-        subgraph = graph.subgraph(cluster_nodes)
-
-        # Count query genes in cluster
-        query_genes_in_cluster = [n for n in cluster_nodes if n in query_genes]
-
-        # Get top nodes by PageRank
-        top_nodes = community.top_nodes[:5] if community.top_nodes else []
-        top_labels = [node_info.get("label", "") for node_info in top_nodes]
-
-        # Add meta-node
-        meta_graph.add_node(
-            cluster_id,
-            label=f"Cluster {community.community_id}\n({len(cluster_nodes)} nodes)",
-            original_symbol="",  # No original symbol for clusters
-            category="Cluster",  # Special category for clusters
-            is_query_gene=False,
-            size=len(cluster_nodes),
-            density=community.density,
-            top_nodes=top_labels,
-            query_gene_count=len(query_genes_in_cluster),
-            node_ids=cluster_nodes,  # Store original node IDs
-            # Metrics for visualization
-            gene_frequency=len(query_genes_in_cluster),
-            pagerank=0,
-            betweenness=0,
-        )
-
-    # Add edges between clusters
-    community_map = {}  # node_id → community_id
-    for community in clustering_results.communities:
-        for node in community.nodes:
-            community_map[node] = community.community_id
-
-    # Count inter-cluster edges
-    inter_cluster_edges = {}  # (comm1, comm2) → count
-
-    for src, tgt in graph.edges():
-        src_comm = community_map.get(src)
-        tgt_comm = community_map.get(tgt)
-
-        if src_comm is not None and tgt_comm is not None and src_comm != tgt_comm:
-            edge_key = tuple(sorted([src_comm, tgt_comm]))
-            inter_cluster_edges[edge_key] = inter_cluster_edges.get(edge_key, 0) + 1
-
-    # Add inter-cluster edges to meta-graph
-    for (comm1, comm2), count in inter_cluster_edges.items():
-        meta_graph.add_edge(
-            f"cluster_{comm1}",
-            f"cluster_{comm2}",
-            predicate=f"{count} edges",
-            weight=count,
-            label=f"{count} edges",
-        )
-
-    return meta_graph
 
 
 def filter_graph_by_annotations(

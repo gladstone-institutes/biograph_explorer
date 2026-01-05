@@ -2,7 +2,7 @@
 
 Handles:
 - Pickling NetworkX graphs with attributes
-- Session state persistence (graphs + clustering results)
+- Session state persistence (graphs + query config)
 - Cache management for TRAPI responses
 - Export to various formats (HTML, JSON, GraphML)
 
@@ -67,7 +67,6 @@ def load_graph(file_path: Path) -> nx.DiGraph:
 def save_session(
     session_id: str,
     graph: nx.DiGraph,
-    clustering_results: Optional[Any] = None,
     query_config: Optional[Dict[str, Any]] = None,
     session_dir: Path = Path("data/sessions"),
 ) -> Path:
@@ -76,14 +75,12 @@ def save_session(
     Creates directory structure:
         sessions/{session_id}/
             graph.pkl
-            clustering_results.json
             query_config.json
             metadata.json
 
     Args:
         session_id: Unique session identifier
         graph: NetworkX graph
-        clustering_results: Optional ClusteringResults object
         query_config: Optional query configuration dict
         session_dir: Root sessions directory
 
@@ -106,7 +103,7 @@ def load_session(
         session_dir: Root sessions directory
 
     Returns:
-        Dictionary with graph, clustering_results, query_config, metadata
+        Dictionary with graph, query_config, metadata
 
     Raises:
         PersistenceError: If session not found or load fails
@@ -132,24 +129,6 @@ def export_graph_to_graphml(
     TODO: Implement GraphML export
     """
     raise NotImplementedError("TODO: Implement GraphML export")
-
-
-def export_clustering_to_json(
-    clustering_results: Any,
-    file_path: Path,
-) -> Path:
-    """Export clustering results to JSON.
-
-    Args:
-        clustering_results: ClusteringResults object
-        file_path: Output file path (.json)
-
-    Returns:
-        Path to exported file
-
-    TODO: Implement JSON export
-    """
-    raise NotImplementedError("TODO: Implement JSON export")
 
 
 def list_sessions(session_dir: Path = Path("data/sessions")) -> list[Dict[str, Any]]:

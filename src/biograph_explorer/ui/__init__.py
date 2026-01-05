@@ -12,7 +12,6 @@ from .network_viz import (
     sample_graph_for_visualization,
     filter_graph_by_annotations,
     get_node_details,
-    create_clustered_graph,
 )
 
 # Phase 3
@@ -23,5 +22,4 @@ __all__ = [
     "sample_graph_for_visualization",
     "filter_graph_by_annotations",
     "get_node_details",
-    "create_clustered_graph",
 ]

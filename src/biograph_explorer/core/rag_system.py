@@ -10,7 +10,7 @@ Implements:
 TODO: Implement in Phase 3 with Anthropic SDK
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Optional
 import networkx as nx
 from pydantic import BaseModel, Field
 
@@ -43,8 +43,7 @@ class RAGSystem:
         >>> rag = RAGSystem(api_key="sk-...", model="claude-haiku-4")
         >>> response = rag.ask_question(
         ...     question="Why is BACE1 a high-priority target?",
-        ...     graph=graph,
-        ...     clustering_results=results
+        ...     graph=graph
         ... )
         >>> print(response.answer)
         >>> # Visualize cited subgraph
@@ -70,14 +69,12 @@ class RAGSystem:
         self,
         question: str,
         graph: nx.DiGraph,
-        clustering_results: Any,
     ) -> RAGResponse:
         """Answer question about the knowledge graph.
 
         Args:
             question: User question
             graph: Full NetworkX knowledge graph
-            clustering_results: ClusteringResults object
 
         Returns:
             RAGResponse with answer, citations, and subgraph
@@ -89,10 +86,9 @@ class RAGSystem:
     def _build_context(
         self,
         graph: nx.DiGraph,
-        clustering_results: Any,
         question: str,
     ) -> str:
-        """Build 3-layer context for LLM.
+        """Build context for LLM.
 
         Phase 3: Not implemented
         """

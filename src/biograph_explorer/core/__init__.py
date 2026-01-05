@@ -3,7 +3,7 @@
 Contains the main business logic:
 - TRAPI client for querying Translator APIs
 - Graph builder for NetworkX construction
-- Clustering engine for community detection and centrality analysis
+- Node annotator for enriching nodes with metadata
 - RAG system for LLM-assisted exploration (Phase 3)
 
 Phase 2 Status: Stubs created, implementation in progress
@@ -11,7 +11,6 @@ Phase 2 Status: Stubs created, implementation in progress
 
 from .trapi_client import TRAPIClient, TRAPIResponse
 from .graph_builder import GraphBuilder, KnowledgeGraph
-from .clustering_engine import ClusteringEngine, ClusteringResults
 from .node_annotator import NodeAnnotator
 from .translator_node import TranslatorNode, TranslatorAttribute, TranslatorEdge
 
@@ -23,8 +22,6 @@ __all__ = [
     "TRAPIResponse",
     "GraphBuilder",
     "KnowledgeGraph",
-    "ClusteringEngine",
-    "ClusteringResults",
     "NodeAnnotator",
     "TranslatorNode",
     "TranslatorAttribute",

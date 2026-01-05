@@ -15,7 +15,7 @@ from typing import Dict, Any
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-from biograph_explorer.core import TRAPIClient, GraphBuilder, ClusteringEngine
+from biograph_explorer.core import TRAPIClient, GraphBuilder
 from biograph_explorer.utils import validate_gene_list, validate_disease_curie, ValidationError
 from biograph_explorer.utils.biolink_predicates import (
     GRANULARITY_PRESETS,
@@ -110,8 +110,6 @@ if 'graph' not in st.session_state:
     st.session_state.graph = None
 if 'knowledge_graph' not in st.session_state:
     st.session_state.knowledge_graph = None  # Store KnowledgeGraph object
-if 'clustering_results' not in st.session_state:
-    st.session_state.clustering_results = None
 if 'query_genes' not in st.session_state:
     st.session_state.query_genes = []
 if 'response' not in st.session_state:
@@ -133,7 +131,7 @@ if 'category_mismatch_detail' not in st.session_state:
 
 # Title
 st.markdown("### :material/biotech: BioGraph Explorer")
-st.caption("Multi-gene TRAPI query integration with NetworkX clustering and visualization")
+st.caption("Multi-gene TRAPI query integration with NetworkX graph analysis and visualization")
 
 # Sidebar: Input Configuration
 st.sidebar.header(":material/input: Input Configuration")
@@ -237,7 +235,6 @@ else:  # Load Cached Query
                     progress_bar.progress(30)
 
                     builder = GraphBuilder()
-                    engine = ClusteringEngine()
 
                     curie_to_symbol = cached_response.metadata.get("curie_to_symbol", {})
                     curie_to_name = cached_response.metadata.get("curie_to_name", {})
@@ -297,18 +294,11 @@ else:  # Load Cached Query
                             logger.warning(f"Node annotation failed (non-fatal): {e}")
                             st.session_state.annotation_metadata = None
 
-                    progress_bar.progress(80)
-
-                    # Cluster
-                    status_text.text("Detecting communities...")
-                    results = engine.analyze_graph(kg.graph, cached_response.input_genes)
-
                     progress_bar.progress(90)
 
                     # Save to session state
                     st.session_state.graph = kg.graph
                     st.session_state.knowledge_graph = kg  # Store KnowledgeGraph object
-                    st.session_state.clustering_results = results
                     st.session_state.query_genes = cached_response.input_genes
                     st.session_state.response = cached_response
                     st.session_state.disease_curie = cached_response.target_disease
@@ -562,7 +552,6 @@ if not run_query and not st.session_state.graph:
         - **Normalize genes** using TCT name resolver
         - **Query TRAPI** APIs for knowledge graph edges
         - **Build graph** with NetworkX
-        - **Detect communities** using Louvain algorithm
         - **Visualize** with interactive Cytoscape.js graphs
         """)
 
@@ -599,7 +588,6 @@ if run_query:
 
         client = TRAPIClient(cache_dir=Path("data/cache"))
         builder = GraphBuilder()
-        engine = ClusteringEngine()
 
         # Convert intermediate type selections to biolink categories
         type_mapping = {
@@ -795,18 +783,11 @@ if run_query:
             logger.warning(f"Node annotation failed (non-fatal): {e}")
             st.session_state.annotation_metadata = None
 
-        progress_bar.progress(85)
-
-        # Step 4: Cluster
-        status_text.text("Detecting communities...")
-        results = engine.analyze_graph(kg.graph, response.input_genes)
-        
         progress_bar.progress(90)
 
         # Save to session state
         st.session_state.graph = kg.graph
         st.session_state.knowledge_graph = kg  # Store KnowledgeGraph object
-        st.session_state.clustering_results = results
         st.session_state.query_genes = response.input_genes
         st.session_state.response = response
         st.session_state.disease_curie = disease_curie  # Store for visualization sampling
@@ -847,13 +828,13 @@ if st.session_state.graph:
     st.divider()
     
     # Tabs for different views
-    tab_network, tab_overview, tab_communities = st.tabs([":material/hub: Network", ":material/analytics: Overview", ":material/group_work: Communities"])
+    tab_network, tab_overview = st.tabs([":material/hub: Network", ":material/analytics: Overview"])
 
     with tab_overview:
         st.markdown("#### Analysis Overview")
         
         # Key metrics
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3 = st.columns(3)
 
         with col1:
             st.metric("Nodes", st.session_state.graph.number_of_nodes(), border=True)
@@ -862,23 +843,9 @@ if st.session_state.graph:
             st.metric("Edges", st.session_state.graph.number_of_edges(), border=True)
 
         with col3:
-            st.metric("Communities", st.session_state.clustering_results.num_communities, border=True)
-
-        with col4:
             import networkx as nx
             st.metric("Density", f"{nx.density(st.session_state.graph):.4f}", border=True)
-        
-        # Graph statistics
-        st.subheader("Graph Statistics")
-        stats_col1, stats_col2 = st.columns(2)
-        
-        with stats_col1:
-            st.json(st.session_state.clustering_results.graph_stats)
-        
-        with stats_col2:
-            st.metric("Modularity", f"{st.session_state.clustering_results.modularity:.3f}", border=True)
-            st.caption("Higher modularity indicates better community structure")
-        
+
         # Node categories
         st.subheader("Node Categories")
         if st.session_state.knowledge_graph and st.session_state.knowledge_graph.node_categories:
@@ -1016,20 +983,6 @@ if st.session_state.graph:
                 help="Number of top intermediate nodes to display, ranked by connections to query genes"
             )
 
-        with col4:
-            # Build cluster options
-            cluster_options = ["All Nodes"]
-            if st.session_state.clustering_results:
-                for comm in st.session_state.clustering_results.communities:
-                    cluster_options.append(f"Cluster {comm.community_id} ({comm.size} nodes)")
-
-            selected_cluster = st.selectbox(
-                "Filter by Cluster",
-                options=cluster_options,
-                index=0,
-                help="View all nodes or filter to a specific community"
-            )
-
         # Visualization controls - Row 2 (Node sizing)
         col5, col6, col7 = st.columns([2, 2, 4])
 
@@ -1107,49 +1060,7 @@ if st.session_state.graph:
         from biograph_explorer.ui.network_viz import render_network_visualization, filter_graph_by_annotations
         from streamlit_cytoscape import streamlit_cytoscape
 
-        # Determine which graph to visualize based on cluster selection
-        if selected_cluster != "All Nodes" and st.session_state.clustering_results:
-            # Extract cluster ID from selection (e.g., "Cluster 0 (45 nodes)" -> 0)
-            cluster_id = int(selected_cluster.split()[1])
-
-            # Find the selected community
-            selected_community = None
-            for comm in st.session_state.clustering_results.communities:
-                if comm.community_id == cluster_id:
-                    selected_community = comm
-                    break
-
-            if selected_community:
-                # Get cluster nodes
-                cluster_nodes = set(selected_community.nodes)
-
-                # Include ALL nodes connected to ANY cluster node
-                # This captures both upstream (query genes) and downstream (disease BPs) connections
-                nodes_to_include = set(cluster_nodes)
-                for node in cluster_nodes:
-                    # Add all neighbors (both directions)
-                    nodes_to_include.update(st.session_state.graph.predecessors(node))
-                    nodes_to_include.update(st.session_state.graph.successors(node))
-
-                # Create subgraph with expanded node set
-                display_graph = st.session_state.graph.subgraph(nodes_to_include).copy()
-
-                # Mark which nodes are "native" to cluster vs "connected" (for opacity styling)
-                for node in display_graph.nodes():
-                    display_graph.nodes[node]['in_cluster'] = node in cluster_nodes
-
-                # Count nodes
-                native_count = len(cluster_nodes & set(display_graph.nodes()))
-                connected_count = display_graph.number_of_nodes() - native_count
-
-                if connected_count > 0:
-                    st.info(f":material/info: Showing Cluster {cluster_id}: {native_count} cluster nodes + {connected_count} connected nodes, {display_graph.number_of_edges()} edges")
-                else:
-                    st.info(f":material/info: Showing Cluster {cluster_id}: {native_count} nodes, {display_graph.number_of_edges()} edges")
-            else:
-                display_graph = st.session_state.graph
-        else:
-            display_graph = st.session_state.graph
+        display_graph = st.session_state.graph
 
         # Apply annotation filters if any are active
         if st.session_state.annotation_filters:
@@ -1185,9 +1096,8 @@ if st.session_state.graph:
         )
 
         if viz_data:
-            # Build dynamic key that changes when cluster selection, layout, or filters change
+            # Build dynamic key that changes when layout or filters change
             # This forces Cytoscape to re-run the layout algorithm instead of preserving old positions
-            cluster_key = selected_cluster.replace(" ", "_").replace("(", "").replace(")", "")
 
             # Include annotation filter state in key so layout re-runs when filters change
             filter_state = st.session_state.annotation_filters
@@ -1199,7 +1109,7 @@ if st.session_state.graph:
             else:
                 filter_hash = 0
 
-            cytoscape_key = f"biograph_network_{cluster_key}_{layout}_{filter_hash}"
+            cytoscape_key = f"biograph_network_{layout}_{filter_hash}"
 
             # Render component
             # When debug_mode is True, show all attributes (hide_underscore_attrs=False)
@@ -1219,24 +1129,6 @@ if st.session_state.graph:
             """)
         else:
             st.error("Failed to render visualization")
-    
-    with tab_communities:
-        st.markdown("#### Community Detection Results")
-        
-        st.write(f"Detected **{st.session_state.clustering_results.num_communities} communities** using Louvain algorithm")
-        st.write(f"Modularity: **{st.session_state.clustering_results.modularity:.3f}**")
-        
-        # Display each community
-        for comm in st.session_state.clustering_results.communities[:10]:  # Limit to top 10
-            with st.expander(f"Community {comm.community_id} ({comm.size} nodes, density={comm.density:.3f})"):
-                if comm.top_nodes:
-                    st.write("**Top nodes by PageRank:**")
-                    for node_info in comm.top_nodes:
-                        st.write(f"- {node_info['label']} (PageRank: {node_info['pagerank']:.4f})")
-                else:
-                    st.write(f"Nodes: {', '.join(comm.nodes[:10])}")
-                    if len(comm.nodes) > 10:
-                        st.caption(f"... and {len(comm.nodes) - 10} more")
 
 # Footer
 st.divider()
