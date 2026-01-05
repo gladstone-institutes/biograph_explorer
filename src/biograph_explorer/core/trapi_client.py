@@ -40,6 +40,85 @@ from biograph_explorer.utils.biolink_predicates import (
 
 logger = logging.getLogger(__name__)
 
+# CURIE prefix to biolink category mapping (matches graph_builder.py classification)
+CURIE_PREFIX_TO_CATEGORY = {
+    "NCBIGene:": "biolink:Gene",
+    "HGNC:": "biolink:Gene",
+    "UniProtKB:": "biolink:Protein",
+    "PR:": "biolink:Protein",
+    "CHEBI:": "biolink:ChemicalEntity",
+    "CHEMBL:": "biolink:ChemicalEntity",
+    "MONDO:": "biolink:Disease",
+    "DOID:": "biolink:Disease",
+    "GO:": "biolink:BiologicalProcess",
+    "REACT:": "biolink:Pathway",
+    "HP:": "biolink:PhenotypicFeature",
+    "UBERON:": "biolink:AnatomicalEntity",
+    "CL:": "biolink:Cell",
+}
+
+
+def _classify_curie_category(curie: str) -> str:
+    """Classify a CURIE to its biolink category based on prefix."""
+    for prefix, category in CURIE_PREFIX_TO_CATEGORY.items():
+        if curie.startswith(prefix):
+            return category
+    return "biolink:NamedThing"  # Generic fallback
+
+
+def _analyze_category_mismatches(
+    edges: List[Dict[str, Any]],
+    input_gene_curies: List[str],
+    disease_curie: Optional[str],
+    requested_categories: List[str],
+) -> Dict[str, Any]:
+    """Analyze intermediate nodes for category mismatches.
+
+    Uses CURIE prefix to classify actual categories and compare against
+    requested categories from the query.
+
+    Args:
+        edges: List of TRAPI edges
+        input_gene_curies: List of input gene CURIEs (to exclude)
+        disease_curie: Target disease CURIE (to exclude)
+        requested_categories: List of requested intermediate categories
+
+    Returns:
+        Dict with category stats including mismatched counts
+    """
+    if not requested_categories:
+        return {}
+
+    input_set = set(input_gene_curies)
+
+    # Identify intermediate nodes (not query genes, not disease)
+    intermediate_nodes = set()
+    for edge in edges:
+        subj = edge.get('subject', '')
+        obj = edge.get('object', '')
+        if subj and subj not in input_set and subj != disease_curie:
+            intermediate_nodes.add(subj)
+        if obj and obj not in input_set and obj != disease_curie:
+            intermediate_nodes.add(obj)
+
+    # Classify and count
+    actual_category_counts: Dict[str, int] = {}
+    mismatched_count = 0
+
+    for node in intermediate_nodes:
+        actual_category = _classify_curie_category(node)
+        actual_category_counts[actual_category] = actual_category_counts.get(actual_category, 0) + 1
+
+        if actual_category not in requested_categories:
+            mismatched_count += 1
+
+    return {
+        "requested_categories": requested_categories,
+        "actual_category_counts": actual_category_counts,
+        "mismatched_count": mismatched_count,
+        "total_intermediates": len(intermediate_nodes),
+    }
+
 
 @dataclass
 class APITiming:
@@ -717,6 +796,21 @@ class TRAPIClient:
             edges_removed += orphans_removed
             logger.info(f"Removed {orphans_removed} edges to orphan intermediates, {len(edges)} edges remaining")
 
+        # Step 8.5: Analyze category mismatches for 2-hop queries
+        category_mismatch_stats = {}
+        if use_two_hop and intermediate_categories:
+            category_mismatch_stats = _analyze_category_mismatches(
+                edges=edges,
+                input_gene_curies=input_gene_curies,
+                disease_curie=disease_curie,
+                requested_categories=intermediate_categories,
+            )
+            if category_mismatch_stats.get("mismatched_count", 0) > 0:
+                logger.warning(
+                    f"Category mismatch: {category_mismatch_stats['mismatched_count']}/{category_mismatch_stats['total_intermediates']} "
+                    f"intermediates don't match requested categories. Actual: {category_mismatch_stats['actual_category_counts']}"
+                )
+
         # Step 9: Resolve common names for all nodes in filtered edges
         if progress_callback:
             progress_callback("Resolving common names for nodes...")
@@ -754,6 +848,8 @@ class TRAPIClient:
                 "edges_removed": edges_removed,
                 "api_timings": [asdict(t) for t in api_timings],
                 "total_query_duration": round(query_duration, 3),
+                "query_json": query_json,  # TRAPI query structure for download
+                "category_mismatch_stats": category_mismatch_stats,  # Category mismatch tracking
             },
             apis_queried=len(selected_APIs),
             apis_succeeded=sum(1 for t in api_timings if t.success),
@@ -1308,6 +1404,21 @@ class TRAPIClient:
         edges_removed += orphans_removed
         logger.info(f"Removed {orphans_removed} orphan edges, {len(edges)} edges remaining")
 
+        # Analyze category mismatches
+        category_mismatch_stats = {}
+        if intermediate_categories:
+            category_mismatch_stats = _analyze_category_mismatches(
+                edges=edges,
+                input_gene_curies=input_gene_curies,
+                disease_curie=None,  # BP query doesn't have disease as endpoint
+                requested_categories=intermediate_categories,
+            )
+            if category_mismatch_stats.get("mismatched_count", 0) > 0:
+                logger.warning(
+                    f"Category mismatch: {category_mismatch_stats['mismatched_count']}/{category_mismatch_stats['total_intermediates']} "
+                    f"intermediates don't match requested categories. Actual: {category_mismatch_stats['actual_category_counts']}"
+                )
+
         # Resolve common names for all nodes in filtered edges
         if progress_callback:
             progress_callback("Resolving common names for nodes...")
@@ -1352,6 +1463,8 @@ class TRAPIClient:
                 "api_timings": [asdict(t) for t in api_timings],
                 "total_query_duration": round(query_duration, 3),
                 "stage1_metadata": bp_metadata,
+                "query_json": query_json,  # TRAPI query structure for download
+                "category_mismatch_stats": category_mismatch_stats,  # Category mismatch tracking
             },
             apis_queried=len(selected_APIs),
             apis_succeeded=successful_count,

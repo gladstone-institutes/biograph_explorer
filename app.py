@@ -7,6 +7,8 @@ import streamlit as st
 from pathlib import Path
 import pandas as pd
 import logging
+import json
+from typing import Dict, Any
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -18,6 +20,51 @@ from biograph_explorer.utils.biolink_predicates import (
     GRANULARITY_PRESETS,
     get_allowed_predicates_for_display,
 )
+
+
+def _build_query_export(response) -> Dict[str, Any]:
+    """Build comprehensive query export for download.
+
+    Includes:
+    - TRAPI query_graph structure
+    - Input parameters (genes, disease, intermediate categories)
+    - Predicate filter settings
+    - API timings and success rates
+    - Category mismatch statistics (if any)
+    """
+    metadata = response.metadata
+
+    return {
+        "query_id": response.query_id,
+        "timestamp": response.timestamp.isoformat() if response.timestamp else None,
+        "input": {
+            "gene_symbols": metadata.get("gene_symbols", []),
+            "normalized_genes": metadata.get("normalized_genes", {}),
+            "disease_curie": response.target_disease,
+            "intermediate_categories": metadata.get("intermediate_categories", []),
+            "query_pattern": metadata.get("query_pattern", ""),
+        },
+        "trapi_query": metadata.get("query_json", {}),
+        "predicate_settings": {
+            "predicate_min_depth": metadata.get("predicate_min_depth"),
+            "exclude_literature": metadata.get("exclude_literature"),
+            "exclude_coexpression": metadata.get("exclude_coexpression"),
+            "exclude_homology": metadata.get("exclude_homology"),
+            "predicates_used_count": metadata.get("predicates_used", 0),
+        },
+        "results": {
+            "total_edges": len(response.edges),
+            "edges_before_filter": metadata.get("edges_before_filter", 0),
+            "edges_removed": metadata.get("edges_removed", 0),
+            "apis_queried": response.apis_queried,
+            "apis_succeeded": response.apis_succeeded,
+        },
+        "api_timings": metadata.get("api_timings", []),
+        "category_mismatch_stats": metadata.get("category_mismatch_stats", {}),
+        "stage1_metadata": metadata.get("stage1_metadata"),
+        "bioprocess_count": metadata.get("bioprocess_count"),
+    }
+
 
 # Page config
 st.set_page_config(
@@ -727,7 +774,28 @@ if run_query:
         
         progress_bar.progress(100)
         status_text.markdown(":material/check_circle: Analysis complete!")
-        
+
+        # Show category mismatch warning if applicable
+        category_stats = response.metadata.get("category_mismatch_stats", {})
+        if category_stats.get("mismatched_count", 0) > 0:
+            mismatch_count = category_stats["mismatched_count"]
+            total_count = category_stats.get("total_intermediates", 0)
+            actual_counts = category_stats.get("actual_category_counts", {})
+            requested = category_stats.get("requested_categories", [])
+
+            # Format category names without biolink: prefix for readability
+            actual_str = ", ".join([f"{k.replace('biolink:', '')}: {v}" for k, v in actual_counts.items()])
+            requested_str = ", ".join([r.replace("biolink:", "") for r in requested])
+
+            st.warning(
+                f"**Category mismatch detected:** {mismatch_count}/{total_count} intermediate nodes "
+                f"don't match requested categories.\n\n"
+                f"**Requested:** {requested_str}  \n"
+                f"**Actual:** {actual_str}\n\n"
+                f"This may be due to knowledge providers conflating similar entity types (e.g., Gene/Protein).",
+                icon=":material/warning:"
+            )
+
     except ValidationError as e:
         st.error(f"Validation error: {e}")
     except Exception as e:
@@ -786,7 +854,28 @@ if st.session_state.graph:
             st.dataframe(category_df, width='stretch')
         else:
             st.info("No node category data available")
-    
+
+        # Query Details and Download
+        st.subheader("Query Details")
+        if st.session_state.response:
+            query_export = _build_query_export(st.session_state.response)
+            query_json_str = json.dumps(query_export, indent=2, default=str)
+
+            col_download, col_preview = st.columns([1, 3])
+            with col_download:
+                st.download_button(
+                    label=":material/download: Download Query JSON",
+                    data=query_json_str,
+                    file_name=f"biograph_query_{st.session_state.response.query_id}.json",
+                    mime="application/json",
+                    help="Download TRAPI query structure, parameters, and API timings"
+                )
+
+            with st.expander("Preview Query JSON", expanded=False):
+                st.json(query_export)
+        else:
+            st.info("No query data available")
+
     with tab_network:
         st.header("Knowledge Graph Visualization")
 
