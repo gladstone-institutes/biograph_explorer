@@ -43,6 +43,11 @@ CATEGORY_COLORS = {
     "Cluster": "#005F45",        # Dark Green
     "Other": "#666666",          # Gray
 }
+
+# Edge color constant for publication highlighting
+# Teal from Tableau colorblind-friendly palette
+HIGHLIGHT_EDGE_COLOR = "#17BECF"
+
 # Get the absolute path to the assets directory
 _ASSETS_DIR = Path(__file__).parent.parent / "assets"
 
@@ -542,6 +547,18 @@ def prepare_cytoscape_elements(
             if query_result_id is not None:
                 edge_element["data"]["_query_result_id"] = query_result_id
 
+            # Set edge color and class based on publication highlight filter
+            has_filtered_pub = edge_attrs.get('_has_filtered_pub', False)
+
+            # Add CSS class for highlighted edges (Cytoscape.js class selector)
+            # This enables the 'edge.highlighted_pub' style to apply teal color
+            if has_filtered_pub:
+                if "classes" in edge_element:
+                    edge_element["classes"] += " highlighted_pub"
+                else:
+                    edge_element["classes"] = "highlighted_pub"
+                logger.debug(f"Edge {source} -> {target} marked for highlighting (class=highlighted_pub)")
+
         # Add edge width and scaled font size - internal styling
         edge_element["data"]["_edge_width"] = edge_width
         # Scale font: 8px at width 1, up to 14px at width 10
@@ -650,7 +667,8 @@ def create_edge_styles(graph: Union[nx.DiGraph, nx.MultiDiGraph]) -> List["EdgeS
             predicates.add(predicate)
 
     # Edge styling: dynamic width and font size
-    # Note: Internal styling attributes use underscore prefix
+    # Note: Edge color is handled via CSS class 'highlighted_pub' for publication filtering
+    # (see get_highlighted_edge_style() for teal color on filtered edges)
     edge_custom_styles = {
         "width": "data(_edge_width)",
         "font-size": "data(_edge_font_size)",
@@ -680,6 +698,49 @@ def create_edge_styles(graph: Union[nx.DiGraph, nx.MultiDiGraph]) -> List["EdgeS
         )
 
     return edge_styles
+
+
+class RawCytoscapeStyle:
+    """Wrapper for raw Cytoscape.js style objects.
+
+    Allows passing raw style dictionaries to streamlit-cytoscape alongside
+    NodeStyle/EdgeStyle objects by implementing the .dump() interface.
+    """
+
+    def __init__(self, selector: str, style: Dict[str, Any]):
+        """Initialize with raw selector and style.
+
+        Args:
+            selector: Cytoscape.js selector string (e.g., 'edge.highlighted_pub')
+            style: Dictionary of Cytoscape.js style properties
+        """
+        self.selector = selector
+        self.style = style
+
+    def dump(self) -> Dict[str, Any]:
+        """Return the raw style object for streamlit-cytoscape."""
+        return {
+            "selector": self.selector,
+            "style": self.style,
+        }
+
+
+def get_highlighted_edge_style() -> RawCytoscapeStyle:
+    """Get style for publication-highlighted edges.
+
+    Returns a RawCytoscapeStyle that can be appended to edge_styles list.
+    Uses class selector 'edge.highlighted_pub' to target highlighted edges.
+
+    Returns:
+        RawCytoscapeStyle object for highlighted edges
+    """
+    return RawCytoscapeStyle(
+        selector="edge.highlighted_pub",
+        style={
+            "line-color": HIGHLIGHT_EDGE_COLOR,
+            "target-arrow-color": HIGHLIGHT_EDGE_COLOR,
+        }
+    )
 
 
 def get_layout_config(layout_name: str = "dagre") -> Dict[str, Any]:
@@ -844,6 +905,10 @@ def render_network_visualization(
         # Create node and edge styles
         node_styles = create_node_styles(graph)
         edge_styles = create_edge_styles(graph)
+
+        # Add highlighted edge style for publication filtering
+        # This must come AFTER regular edge styles to have higher CSS specificity
+        edge_styles.append(get_highlighted_edge_style())
 
         # Get layout configuration
         layout_config = get_layout_config(layout)
@@ -1199,14 +1264,16 @@ def filter_graph_by_publication(
     query_genes: List[str],
     disease_curie: Optional[str] = None,
 ) -> Union[nx.DiGraph, nx.MultiDiGraph]:
-    """Filter graph to show only edges with the selected publication.
+    """Filter graph to intermediates with the publication, preserving context.
 
     Strategy:
-    1. Find all edges that have the selected publication in their publications list
-    2. Include nodes connected by these edges
-    3. Always include all query genes (even if disconnected after filtering)
-    4. Always include disease node if present
-    5. Remove edges that don't have the selected publication
+    1. Find edges that have the selected publication (highlighted edges)
+    2. Identify intermediate nodes connected by these edges
+    3. Keep ALL edges connected to these intermediates (to maintain context)
+    4. Always include query genes and disease node
+    5. Mark edges with publication as '_has_filtered_pub=True' for highlighting
+
+    This avoids orphan nodes by keeping the full neighborhood of relevant intermediates.
 
     Args:
         graph: Full NetworkX graph (DiGraph or MultiDiGraph)
@@ -1215,7 +1282,7 @@ def filter_graph_by_publication(
         disease_curie: Optional disease CURIE (always included if present)
 
     Returns:
-        Filtered subgraph with only edges containing the selected publication
+        Filtered subgraph with edges marked for highlighting
     """
     from biograph_explorer.utils.publication_utils import normalize_publication_id
 
@@ -1227,48 +1294,75 @@ def filter_graph_by_publication(
         return graph
 
     query_gene_set = set(query_genes) if query_genes else set()
-    nodes_to_include = set(query_gene_set)
 
-    if disease_curie and disease_curie in graph:
-        nodes_to_include.add(disease_curie)
+    # Step 1: Find edges with the publication and collect intermediate nodes
+    edges_with_pub = set()  # (u, v) or (u, v, key) tuples
+    intermediates_with_pub = set()  # Intermediate nodes connected by pub edges
 
-    # Find edges with this publication - handle both DiGraph and MultiDiGraph
-    edges_to_keep = set()  # Use set for O(1) lookup
     if isinstance(graph, nx.MultiDiGraph):
         for u, v, key, data in graph.edges(keys=True, data=True):
             pubs = data.get('publications', []) or []
             normalized_pubs = [normalize_publication_id(p) for p in pubs if p]
             if normalized_pub in normalized_pubs:
-                edges_to_keep.add((u, v, key))
-                nodes_to_include.add(u)
-                nodes_to_include.add(v)
+                edges_with_pub.add((u, v, key))
+                # Track intermediate nodes (non-query-gene endpoints)
+                if u not in query_gene_set and u != disease_curie:
+                    intermediates_with_pub.add(u)
+                if v not in query_gene_set and v != disease_curie:
+                    intermediates_with_pub.add(v)
     else:
         for u, v, data in graph.edges(data=True):
             pubs = data.get('publications', []) or []
             normalized_pubs = [normalize_publication_id(p) for p in pubs if p]
             if normalized_pub in normalized_pubs:
-                edges_to_keep.add((u, v))
-                nodes_to_include.add(u)
-                nodes_to_include.add(v)
+                edges_with_pub.add((u, v))
+                if u not in query_gene_set and u != disease_curie:
+                    intermediates_with_pub.add(u)
+                if v not in query_gene_set and v != disease_curie:
+                    intermediates_with_pub.add(v)
 
-    # Create filtered subgraph with all relevant nodes
+    if not intermediates_with_pub:
+        logger.warning(f"No intermediate nodes found with publication '{selected_publication}'")
+        return graph
+
+    # Step 2: Build node set - intermediates with pub + their connected query genes + disease
+    nodes_to_include = set(intermediates_with_pub)
+
+    # Include query genes that connect to any intermediate with the publication
+    for query_gene in query_gene_set:
+        if query_gene not in graph:
+            continue
+        neighbors = set(graph.predecessors(query_gene)) | set(graph.successors(query_gene))
+        if neighbors & intermediates_with_pub:
+            nodes_to_include.add(query_gene)
+
+    # Always include disease node if it connects to any intermediate with pub
+    if disease_curie and disease_curie in graph:
+        disease_neighbors = set(graph.predecessors(disease_curie)) | set(graph.successors(disease_curie))
+        if disease_neighbors & intermediates_with_pub:
+            nodes_to_include.add(disease_curie)
+
+    # Step 3: Create subgraph with these nodes
     filtered_graph = graph.subgraph(nodes_to_include).copy()
 
-    # Remove edges that don't have the selected publication
+    # Step 4: Mark edges with/without the publication for highlighting
+    pub_edge_count = 0
     if isinstance(filtered_graph, nx.MultiDiGraph):
-        edges_in_subgraph = list(filtered_graph.edges(keys=True))
-        for u, v, key in edges_in_subgraph:
-            if (u, v, key) not in edges_to_keep:
-                filtered_graph.remove_edge(u, v, key=key)
+        for u, v, key, data in filtered_graph.edges(keys=True, data=True):
+            has_pub = (u, v, key) in edges_with_pub
+            filtered_graph[u][v][key]['_has_filtered_pub'] = has_pub
+            if has_pub:
+                pub_edge_count += 1
     else:
-        edges_in_subgraph = list(filtered_graph.edges())
-        for u, v in edges_in_subgraph:
-            if (u, v) not in edges_to_keep:
-                filtered_graph.remove_edge(u, v)
+        for u, v, data in filtered_graph.edges(data=True):
+            has_pub = (u, v) in edges_with_pub
+            filtered_graph[u][v]['_has_filtered_pub'] = has_pub
+            if has_pub:
+                pub_edge_count += 1
 
     logger.info(
         f"Publication filter '{selected_publication}': {filtered_graph.number_of_nodes()} nodes, "
-        f"{len(edges_to_keep)} edges with publication"
+        f"{filtered_graph.number_of_edges()} edges ({pub_edge_count} with publication)"
     )
 
     return filtered_graph

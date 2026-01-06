@@ -905,34 +905,85 @@ if st.session_state.graph:
         if st.session_state.graph and st.session_state.graph.number_of_edges() > 0:
             from biograph_explorer.utils.publication_utils import (
                 get_publication_frequency,
+                get_publication_frequency_by_category,
                 format_publication_display,
             )
+            from biograph_explorer.ui.network_viz import CATEGORY_COLORS
 
+            # Get frequency by category for stacked bars
             pub_freq = get_publication_frequency(st.session_state.graph)
+            pub_freq_by_cat = get_publication_frequency_by_category(st.session_state.graph)
 
-            if pub_freq:
-                # Get top 10 publications by frequency
-                top_pubs = sorted(pub_freq.items(), key=lambda x: x[1], reverse=True)[:10]
+            if pub_freq_by_cat:
+                # Get unique categories for filter dropdown
+                all_categories_in_pubs = set()
+                for cat_counts in pub_freq_by_cat.values():
+                    all_categories_in_pubs.update(cat_counts.keys())
+                all_categories_in_pubs = sorted(all_categories_in_pubs)
 
-                # Create DataFrame for horizontal bar chart
-                pub_df = pd.DataFrame([
-                    {
-                        "Publication": format_publication_display(pub_id),
-                        "Edge Count": count,
-                    }
-                    for pub_id, count in top_pubs
-                ])
+                # Category filter for bar chart
+                col_filter, col_spacer = st.columns([2, 4])
+                with col_filter:
+                    bar_category_filter = st.selectbox(
+                        "Filter by Category",
+                        options=["All Categories"] + all_categories_in_pubs,
+                        index=0,
+                        key="pub_bar_category_filter",
+                        help="Filter bar chart to show only edges of specific intermediate type"
+                    )
 
-                st.caption(f"Top {len(top_pubs)} Most Cited Publications")
-                import altair as alt
-                chart = alt.Chart(pub_df).mark_bar().encode(
-                    x=alt.X('Edge Count:Q', title='Edge Count', axis=alt.Axis(tickMinStep=1)),
-                    y=alt.Y('Publication:N', sort='-x', title=None),
-                    tooltip=['Publication', 'Edge Count']
-                ).properties(
-                    height=min(300, len(top_pubs) * 30)
-                )
-                st.altair_chart(chart, use_container_width=True)
+                # Calculate totals for sorting (filtered if category selected)
+                pub_totals = {}
+                for pub_id, cat_counts in pub_freq_by_cat.items():
+                    if bar_category_filter == "All Categories":
+                        pub_totals[pub_id] = sum(cat_counts.values())
+                    elif bar_category_filter in cat_counts:
+                        pub_totals[pub_id] = cat_counts[bar_category_filter]
+
+                # Get top 10 publications (only those with counts after filtering)
+                top_pubs = sorted(
+                    [(k, v) for k, v in pub_totals.items() if v > 0],
+                    key=lambda x: x[1],
+                    reverse=True
+                )[:10]
+                top_pub_ids = [p[0] for p in top_pubs]
+
+                if top_pub_ids:
+                    # Build DataFrame for stacked bar chart
+                    rows = []
+                    for pub_id in top_pub_ids:
+                        cat_counts = pub_freq_by_cat[pub_id]
+                        for category, count in cat_counts.items():
+                            if bar_category_filter == "All Categories" or category == bar_category_filter:
+                                rows.append({
+                                    "Publication": format_publication_display(pub_id),
+                                    "Category": category,
+                                    "Edge Count": count,
+                                })
+
+                    pub_df = pd.DataFrame(rows)
+
+                    st.caption(f"Top {len(top_pub_ids)} Most Cited Publications")
+                    import altair as alt
+                    chart = alt.Chart(pub_df).mark_bar().encode(
+                        x=alt.X('Edge Count:Q', title='Edge Count', axis=alt.Axis(tickMinStep=1)),
+                        y=alt.Y('Publication:N', sort='-x', title=None),
+                        color=alt.Color(
+                            'Category:N',
+                            scale=alt.Scale(
+                                domain=list(CATEGORY_COLORS.keys()),
+                                range=list(CATEGORY_COLORS.values())
+                            ),
+                            legend=alt.Legend(title="Intermediate Type")
+                        ),
+                        tooltip=['Publication', 'Category', 'Edge Count'],
+                        order=alt.Order('Category:N')
+                    ).properties(
+                        height=min(300, len(top_pub_ids) * 30)
+                    )
+                    st.altair_chart(chart, use_container_width=True)
+                else:
+                    st.info("No publications found for selected category")
 
                 # Summary metrics
                 col_pub1, col_pub2 = st.columns(2)
@@ -1315,19 +1366,32 @@ if st.session_state.graph:
                 gene_suffix = f" + {connected_query_gene_count} connected query genes" if connected_query_gene_count > 0 else ""
                 st.info(f":material/category: Showing {category_intermediate_count} {category_filter} intermediates{gene_suffix}")
 
-        # Apply publication filter if selected
+        # Apply publication filter if selected (filters to relevant intermediates + highlights edges)
+        highlighted_count = 0  # Track for meta-edge coloring
         if pub_filter:
-            pre_pub_count = display_graph.number_of_edges()
+            pre_pub_nodes = display_graph.number_of_nodes()
             display_graph = filter_graph_by_publication(
                 display_graph,
                 pub_filter,
                 st.session_state.query_genes,
                 st.session_state.disease_curie
             )
-            post_pub_count = display_graph.number_of_edges()
+            # Count highlighted edges
+            if isinstance(display_graph, nx.MultiDiGraph):
+                highlighted_count = sum(
+                    1 for _, _, _, d in display_graph.edges(keys=True, data=True)
+                    if d.get('_has_filtered_pub')
+                )
+            else:
+                highlighted_count = sum(
+                    1 for _, _, d in display_graph.edges(data=True)
+                    if d.get('_has_filtered_pub')
+                )
+            total_edges = display_graph.number_of_edges()
             st.info(
-                f":material/description: Publication filter: {post_pub_count} edges citing "
-                f"{format_publication_display(pub_filter)}"
+                f":material/highlight: {highlighted_count} edges citing "
+                f"{format_publication_display(pub_filter)} (teal), "
+                f"{total_edges - highlighted_count} context edges (gray)"
             )
 
         # Prepare visualization data
@@ -1367,19 +1431,36 @@ if st.session_state.graph:
             )
 
             # Compute priority predicate for edge collapsing
-            # Use the most specific predicate (highest biolink depth) as the meta-edge label
+            # When publication filter is active, prioritize predicates from edges with the publication
+            # Otherwise, use the most specific predicate (highest biolink depth) as the meta-edge label
             from biograph_explorer.utils.biolink_predicates import get_predicate_depths
             all_predicates = set()
-            for _, _, data in display_graph.edges(data=True):
-                pred = data.get("predicate", "").replace("biolink:", "")
-                if pred:
-                    all_predicates.add(pred)
+            filtered_pub_predicates = set()  # Predicates from edges with the filtered publication
+
+            if isinstance(display_graph, nx.MultiDiGraph):
+                for _, _, _, data in display_graph.edges(keys=True, data=True):
+                    pred = data.get("predicate", "").replace("biolink:", "")
+                    if pred:
+                        all_predicates.add(pred)
+                        # Track predicates from publication-filtered edges
+                        if data.get('_has_filtered_pub'):
+                            filtered_pub_predicates.add(pred)
+            else:
+                for _, _, data in display_graph.edges(data=True):
+                    pred = data.get("predicate", "").replace("biolink:", "")
+                    if pred:
+                        all_predicates.add(pred)
+                        if data.get('_has_filtered_pub'):
+                            filtered_pub_predicates.add(pred)
+
+            # Use publication-filtered predicates when pub_filter is active, else all predicates
+            predicates_to_use = filtered_pub_predicates if (pub_filter and filtered_pub_predicates) else all_predicates
 
             # Sort by depth (most specific first), then alphabetically for ties
-            if all_predicates:
+            if predicates_to_use:
                 depths = get_predicate_depths()
                 sorted_predicates = sorted(
-                    all_predicates,
+                    predicates_to_use,
                     key=lambda p: (-depths.get(p.lower().replace(" ", "_"), 0), p)
                 )
                 priority_label = sorted_predicates[0]
@@ -1390,11 +1471,34 @@ if st.session_state.graph:
             # When debug_mode is True, show all attributes (hide_underscore_attrs=False)
             # Meta-edge styling to match regular edges (font size, width, text rotation)
             meta_edge_font_size = max(8, min(14, 6 + edge_width))
+
+            # Import teal highlight color for priority EdgeStyle
+            from biograph_explorer.ui.network_viz import HIGHLIGHT_EDGE_COLOR
+
+            # Add colored EdgeStyle for priority predicate when publication filter is active
+            # Meta-edges inherit color from the EdgeStyle matching priority_edge_label
+            if pub_filter and priority_label:
+                from streamlit_cytoscape import EdgeStyle
+                priority_edge_style = EdgeStyle(
+                    label=priority_label,
+                    caption="label",
+                    directed=True,
+                    color=HIGHLIGHT_EDGE_COLOR,  # Teal color for meta-edges
+                    custom_styles={
+                        "width": "data(_edge_width)",
+                        "font-size": "data(_edge_font_size)",
+                    }
+                )
+                # Insert at beginning so it takes precedence over default styles
+                viz_data["edge_styles"].insert(0, priority_edge_style)
+
+            # Meta-edge styling: neutral gray base, color comes from priority EdgeStyle
             meta_edge_style = {
                 "width": edge_width,
                 "font-size": meta_edge_font_size,
                 "text-rotation": "autorotate",  # Align label with edge line
             }
+
             streamlit_cytoscape(
                 viz_data["elements"],
                 layout=viz_data["layout"],

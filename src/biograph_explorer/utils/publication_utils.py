@@ -28,6 +28,53 @@ def get_publication_frequency(graph: nx.DiGraph | nx.MultiDiGraph) -> Dict[str, 
     return pub_counts
 
 
+def get_publication_frequency_by_category(
+    graph: nx.DiGraph | nx.MultiDiGraph
+) -> Dict[str, Dict[str, int]]:
+    """Count publication occurrences by intermediate node category.
+
+    For each publication, counts how many edges cite it broken down by the
+    category of the intermediate node (non-query-gene endpoint).
+
+    Args:
+        graph: NetworkX graph with edge 'publications' and node 'category' attributes
+
+    Returns:
+        Nested dict: {pub_id: {category: count}}
+        Example: {"PMID:12345": {"Protein": 3, "Gene": 2}}
+    """
+    pub_category_counts: Dict[str, Dict[str, int]] = {}
+
+    for u, v, data in graph.edges(data=True):
+        pubs = data.get('publications', [])
+        if not pubs:
+            continue
+
+        # Determine intermediate category (non-query-gene node)
+        # Check target first, then source
+        target_is_query = graph.nodes.get(v, {}).get('is_query_gene', False)
+        source_is_query = graph.nodes.get(u, {}).get('is_query_gene', False)
+
+        if not target_is_query:
+            category = graph.nodes.get(v, {}).get('category', 'Other')
+        elif not source_is_query:
+            category = graph.nodes.get(u, {}).get('category', 'Other')
+        else:
+            # Both are query genes - use 'Gene'
+            category = 'Gene'
+
+        for pub in pubs:
+            normalized = normalize_publication_id(pub)
+            if normalized:
+                if normalized not in pub_category_counts:
+                    pub_category_counts[normalized] = {}
+                pub_category_counts[normalized][category] = (
+                    pub_category_counts[normalized].get(category, 0) + 1
+                )
+
+    return pub_category_counts
+
+
 def normalize_publication_id(pub_id: str) -> Optional[str]:
     """Normalize publication ID format for consistent grouping.
 
