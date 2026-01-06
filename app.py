@@ -128,6 +128,8 @@ if 'query_messages' not in st.session_state:
     st.session_state.query_messages = []
 if 'category_mismatch_detail' not in st.session_state:
     st.session_state.category_mismatch_detail = None
+if 'collapse_counter' not in st.session_state:
+    st.session_state.collapse_counter = 0
 
 # Title
 st.markdown("### :material/biotech: BioGraph Explorer")
@@ -303,17 +305,17 @@ else:  # Load Cached Query
                     st.session_state.response = cached_response
                     st.session_state.disease_curie = cached_response.target_disease
 
-                    # Validate publication extraction (detect edge collisions)
+                    # Validate publication extraction (detect duplicate edges)
                     from biograph_explorer.utils.publication_utils import validate_publication_extraction
                     pub_validation = validate_publication_extraction(cached_response.edges)
                     st.session_state.pub_validation = pub_validation
                     if pub_validation["has_issues"]:
                         notify(
-                            f"Edge collisions detected: {pub_validation['edges_lost_to_collisions']} edges lost, "
-                            f"{pub_validation['publications_at_risk']} publications at risk. "
+                            f"Duplicate edges detected: {pub_validation['edges_lost_to_collisions']} duplicates found "
+                            f"({pub_validation['publications_at_risk']} publications on duplicates). "
                             f"See Query Log for details.",
-                            msg_type="warning",
-                            icon="warning"
+                            msg_type="info",
+                            icon="info"
                         )
 
                     progress_bar.progress(100)
@@ -518,6 +520,17 @@ exclude_homology = st.sidebar.checkbox(
     help="Exclude 'homologous_to', 'orthologous_to', 'paralogous_to', 'xenologous_to' predicates"
 )
 
+# API Timeout slider (in minutes for user-friendliness)
+api_timeout_minutes = st.sidebar.slider(
+    "API Timeout (minutes)",
+    min_value=1,
+    max_value=15,
+    value=10,
+    step=1,
+    help="Timeout for each TRAPI API request. Increase if queries are timing out."
+)
+api_timeout = api_timeout_minutes * 60  # Convert to seconds for client
+
 # Show included predicates in expander
 with st.sidebar.expander("View included predicates"):
     min_depth = GRANULARITY_PRESETS[predicate_preset]["min_depth"]
@@ -599,7 +612,7 @@ if run_query:
         status_text.text("Initializing TRAPI client...")
         progress_bar.progress(10)
 
-        client = TRAPIClient(cache_dir=Path("data/cache"))
+        client = TRAPIClient(cache_dir=Path("data/cache"), timeout=api_timeout)
         builder = GraphBuilder()
 
         # Convert intermediate type selections to biolink categories
@@ -808,17 +821,17 @@ if run_query:
         progress_bar.progress(100)
         status_text.markdown(":material/check_circle: Analysis complete!")
 
-        # Validate publication extraction (detect edge collisions)
+        # Validate publication extraction (detect duplicate edges)
         from biograph_explorer.utils.publication_utils import validate_publication_extraction
         pub_validation = validate_publication_extraction(response.edges)
         st.session_state.pub_validation = pub_validation
         if pub_validation["has_issues"]:
             notify(
-                f"Edge collisions detected: {pub_validation['edges_lost_to_collisions']} edges lost, "
-                f"{pub_validation['publications_at_risk']} publications at risk. "
+                f"Duplicate edges detected: {pub_validation['edges_lost_to_collisions']} duplicates found "
+                f"({pub_validation['publications_at_risk']} publications on duplicates). "
                 f"See Query Log for details.",
-                msg_type="warning",
-                icon="warning"
+                msg_type="info",
+                icon="info"
             )
 
         # Show category mismatch warning if applicable
@@ -926,10 +939,18 @@ if st.session_state.graph:
                 with col_pub1:
                     st.metric("Unique Publications", len(pub_freq), border=True)
                 with col_pub2:
-                    edges_with_pubs = sum(
-                        1 for u, v in st.session_state.graph.edges()
-                        if st.session_state.graph[u][v].get('publications')
-                    )
+                    # Handle both DiGraph and MultiDiGraph edge access
+                    graph = st.session_state.graph
+                    if isinstance(graph, nx.MultiDiGraph):
+                        edges_with_pubs = sum(
+                            1 for u, v, key, data in graph.edges(keys=True, data=True)
+                            if data.get('publications')
+                        )
+                    else:
+                        edges_with_pubs = sum(
+                            1 for u, v, data in graph.edges(data=True)
+                            if data.get('publications')
+                        )
                     st.metric("Edges with Publications", edges_with_pubs, border=True)
             else:
                 st.info("No publication data found in edges")
@@ -982,15 +1003,14 @@ if st.session_state.graph:
                     st.markdown(f"**Actual:** {detail['actual']}")
                     st.caption("This may be due to knowledge providers conflating similar entity types (e.g., Gene/Protein).")
 
-            # Publication extraction debug details (if issues exist)
+            # Publication extraction debug details (if duplicate edges exist)
             if st.session_state.get('pub_validation') and st.session_state.pub_validation.get('has_issues'):
                 pub_val = st.session_state.pub_validation
-                with st.expander("Edge Collision Debug Details", expanded=True):
-                    st.markdown("**⚠️ Publication loss due to DiGraph edge collisions**")
+                with st.expander("Duplicate Edge Details", expanded=False):
+                    st.markdown("**ℹ️ Duplicate edges detected in TRAPI data**")
                     st.markdown(
-                        "NetworkX DiGraph only stores ONE edge between any two nodes. "
-                        "When multiple TRAPI edges exist between the same node pair (with different predicates), "
-                        "only the last edge is kept, and publications from earlier edges are lost."
+                        "Multiple edges with identical (subject, object, predicate) tuples were found. "
+                        "All edges are preserved in the MultiDiGraph, but this may indicate upstream data issues."
                     )
 
                     # Summary stats
@@ -998,34 +1018,31 @@ if st.session_state.graph:
                     with col1:
                         st.metric("Raw TRAPI Edges", pub_val.get('total_edges', 0))
                     with col2:
-                        st.metric("Unique Node Pairs", pub_val.get('unique_node_pairs', 0))
+                        st.metric("Unique (S,O,P) Tuples", pub_val.get('unique_node_pairs', 0))
                     with col3:
-                        st.metric("Edges Lost", pub_val.get('edges_lost_to_collisions', 0))
+                        st.metric("Duplicate Edges", pub_val.get('edges_lost_to_collisions', 0))
 
-                    pubs_at_risk = pub_val.get('publications_at_risk', 0)
-                    if pubs_at_risk > 0:
-                        st.warning(f"**{pubs_at_risk} publications** are on edges that were overwritten")
+                    pubs_on_dups = pub_val.get('publications_at_risk', 0)
+                    if pubs_on_dups > 0:
+                        st.info(f"**{pubs_on_dups} publications** are on duplicate edges (all preserved)")
 
-                    # Show sample collisions
+                    # Show sample duplicates
                     samples = pub_val.get('sample_collisions', [])
                     if samples:
                         st.markdown("---")
-                        st.markdown("**Sample edge collisions with publication loss:**")
+                        st.markdown("**Sample duplicate edge groups:**")
                         for i, sample in enumerate(samples, 1):
                             with st.container(border=True):
-                                st.markdown(f"**Collision {i}:** `{sample['subject']}` → `{sample['object']}`")
-                                st.markdown(f"**{sample['edge_count']} edges** compete for this node pair:")
+                                st.markdown(f"**Duplicate {i}:** `{sample['subject']}` → `{sample['object']}`")
+                                st.markdown(f"**Predicate:** `{sample.get('predicate', 'unknown')}`")
+                                st.markdown(f"**{sample.get('duplicate_count', sample.get('edge_count', 0))} instances** of this edge:")
 
                                 for pub_info in sample.get('pubs_by_edge', []):
                                     st.markdown(f"- {pub_info}")
 
-                                st.markdown(f"**Kept:** `{sample['kept_predicate']}`")
-                                if sample.get('kept_pubs'):
-                                    st.markdown(f"**Kept publications:** {', '.join(sample['kept_pubs'])}")
-
                     st.caption(
-                        "**Solution:** Migrate from DiGraph to MultiDiGraph to preserve all edges, "
-                        "or implement edge merging to combine publications from duplicate edges."
+                        "**Note:** All edges are preserved in MultiDiGraph. Duplicates may indicate "
+                        "the same relationship reported by multiple knowledge sources."
                     )
 
             # Then success messages
@@ -1169,7 +1186,7 @@ if st.session_state.graph:
                 )
 
         # Visualization controls - Row 2 (Node sizing)
-        col6, col7, col8 = st.columns([2, 2, 4])
+        col6, col7, col8, col9 = st.columns([2, 2, 3, 1])
 
         with col6:
             base_node_size = st.slider(
@@ -1197,6 +1214,11 @@ if st.session_state.graph:
                 step=1,
                 help="Width of edges in pixels"
             )
+
+        with col9:
+            # Add collapse button to allow users to re-collapse expanded edges
+            if st.button(":material/unfold_less: Collapse", help="Re-collapse all expanded parallel edges"):
+                st.session_state.collapse_counter += 1
 
         # Visualization controls - Row 3 (Annotation Filters)
         # Dynamically discover filterable attributes from annotation metadata
@@ -1336,23 +1358,61 @@ if st.session_state.graph:
                 filter_hash = 0
 
             pub_filter_hash = hash(pub_filter) if pub_filter else 0
-            cytoscape_key = f"biograph_network_{layout}_{filter_hash}_{category_filter}_{pub_filter_hash}"
+            # Include ALL visualization parameters in key to force re-render when any change
+            # This ensures meta-edges stay collapsed when sliders/dropdowns change
+            cytoscape_key = (
+                f"biograph_network_{layout}_{filter_hash}_{category_filter}_{pub_filter_hash}_"
+                f"{max_intermediates}_{sizing_metric}_{base_node_size}_{use_metric_sizing}_{edge_width}_"
+                f"{st.session_state.collapse_counter}"
+            )
 
-            # Render component
+            # Compute priority predicate for edge collapsing
+            # Use the most specific predicate (highest biolink depth) as the meta-edge label
+            from biograph_explorer.utils.biolink_predicates import get_predicate_depths
+            all_predicates = set()
+            for _, _, data in display_graph.edges(data=True):
+                pred = data.get("predicate", "").replace("biolink:", "")
+                if pred:
+                    all_predicates.add(pred)
+
+            # Sort by depth (most specific first), then alphabetically for ties
+            if all_predicates:
+                depths = get_predicate_depths()
+                sorted_predicates = sorted(
+                    all_predicates,
+                    key=lambda p: (-depths.get(p.lower().replace(" ", "_"), 0), p)
+                )
+                priority_label = sorted_predicates[0]
+            else:
+                priority_label = None
+
+            # Render component with edge collapsing enabled
             # When debug_mode is True, show all attributes (hide_underscore_attrs=False)
+            # Meta-edge styling to match regular edges (font size, width, text rotation)
+            meta_edge_font_size = max(8, min(14, 6 + edge_width))
+            meta_edge_style = {
+                "width": edge_width,
+                "font-size": meta_edge_font_size,
+                "text-rotation": "autorotate",  # Align label with edge line
+            }
             streamlit_cytoscape(
                 viz_data["elements"],
                 layout=viz_data["layout"],
                 node_styles=viz_data["node_styles"],
                 edge_styles=viz_data["edge_styles"],
                 key=cytoscape_key,
-                hide_underscore_attrs=not st.session_state.debug_mode
+                hide_underscore_attrs=not st.session_state.debug_mode,
+                # Edge collapsing: collapse parallel edges and show most specific predicate
+                edge_actions=["collapse", "expand"],
+                collapse_parallel_edges=True,
+                priority_edge_label=priority_label,
+                meta_edge_style=meta_edge_style,
             )
 
             st.caption("""
             **:material/lightbulb: How to explore:**
             - **Drag** to pan • **Scroll** to zoom • **Click** node or edge to select and view information
-            - **Fullscreen** button in top-right • **Export JSON** for external tools
+            - **Double-click** collapsed edge to expand parallel edges • **Fullscreen** in top-right
             """)
         else:
             st.error("Failed to render visualization")

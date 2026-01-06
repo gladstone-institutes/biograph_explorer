@@ -4493,14 +4493,14 @@ sql = ["SQLAlchemy (>=2.0.0)"]
 
 [[package]]
 name = "streamlit-cytoscape"
-version = "0.1.2"
+version = "0.1.3"
 description = "A flexible, customizable, Streamlit component for interactive graph visualization using Cytoscape.js"
 optional = false
 python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "streamlit_cytoscape-0.1.2-py3-none-any.whl", hash = "sha256:5fbecbbd30e7831a0026fc8685c7040304b8a5e7202969bf0f889f618adbc5d9"},
-    {file = "streamlit_cytoscape-0.1.2.tar.gz", hash = "sha256:170a65e5f51fce9f0428b50ba91ffbe1b5fa894165b3b706a4f338f7aa23698f"},
+    {file = "streamlit_cytoscape-0.1.3-py3-none-any.whl", hash = "sha256:600e157361ed9842030bfe8c21a28d2c9cf1e0734d0acf6bf9c3170158dc9854"},
+    {file = "streamlit_cytoscape-0.1.3.tar.gz", hash = "sha256:f7ed6fc2daee9bb96664a36233e2678e8e91217a97893866f3efa994ed4c17f4"},
 ]
 
 [package.dependencies]
@@ -4923,4 +4923,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4.0"
-content-hash = "80f780091eeb03b12a6e30fd13af7245d86da0ad1df91e89815f757ae84e06aa"
+content-hash = "4ade14b75ca206b5ded978af5fd92266fb6e7c1363e56a9282189950f9c50eda"

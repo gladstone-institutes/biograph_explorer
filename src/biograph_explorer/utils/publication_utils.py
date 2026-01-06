@@ -8,11 +8,11 @@ PMID_PATTERN = re.compile(r'PMID:?\s*(\d+)', re.IGNORECASE)
 PMC_PATTERN = re.compile(r'(?:PMC|PMCID):?\s*(PMC)?(\d+)', re.IGNORECASE)
 
 
-def get_publication_frequency(graph: nx.DiGraph) -> Dict[str, int]:
+def get_publication_frequency(graph: nx.DiGraph | nx.MultiDiGraph) -> Dict[str, int]:
     """Count publication occurrences across all edges.
 
     Args:
-        graph: NetworkX DiGraph with edge 'publications' attributes
+        graph: NetworkX graph (DiGraph or MultiDiGraph) with edge 'publications' attributes
 
     Returns:
         Dictionary mapping normalized publication ID to edge count
@@ -122,11 +122,15 @@ def _extract_publications_from_attributes(attributes: List[Dict[str, Any]]) -> L
 
 
 def validate_publication_extraction(edges: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Detect publication loss due to edge collisions in DiGraph.
+    """Detect duplicate edges in TRAPI data.
 
-    This function analyzes raw TRAPI edges to identify where publications exist
-    in the source data. When multiple edges exist between the same node pair,
-    DiGraph keeps only the last edge, causing publication loss.
+    With MultiDiGraph, edges with different predicates between the same nodes are
+    preserved (they have different keys). This function validates that no edges
+    with identical (subject, object, predicate) tuples exist, which would indicate
+    duplicate data from TRAPI.
+
+    Note: With the current edge key strategy (predicate + index), even true
+    duplicates are preserved. This validation helps identify upstream data issues.
 
     Args:
         edges: List of raw TRAPI edge dictionaries
@@ -135,17 +139,19 @@ def validate_publication_extraction(edges: List[Dict[str, Any]]) -> Dict[str, An
         Validation report dictionary with:
         - total_edges: Total raw TRAPI edges
         - edges_with_publications: Edges that have extractable publications
-        - unique_node_pairs: Number of unique (subject, object) pairs
-        - edges_lost_to_collisions: Edges lost due to DiGraph overwriting
-        - publications_at_risk: Publications on edges that may be lost
-        - sample_collisions: Sample edges involved in collisions
-        - has_issues: Boolean indicating if edge collisions occurred
+        - unique_node_pairs: Number of unique (subject, object, predicate) tuples
+        - edges_lost_to_collisions: Count of duplicate edges (same S,O,P tuple)
+        - publications_at_risk: Publications on duplicate edges
+        - sample_collisions: Sample duplicate edge groups
+        - has_issues: Boolean indicating if duplicates were found
     """
     total_edges = len(edges)
     edges_with_pubs = 0
 
-    # Track edges by node pair to detect collisions
-    node_pair_edges: Dict[tuple, List[Dict[str, Any]]] = {}
+    # Track edges by (subject, object, predicate) to detect true duplicates
+    # With MultiDiGraph, edges with different predicates are preserved (different keys)
+    # Only edges with identical (S, O, P) would be duplicates
+    edge_tuples: Dict[tuple, List[Dict[str, Any]]] = {}
 
     for edge in edges:
         attributes = edge.get('attributes', [])
@@ -154,55 +160,55 @@ def validate_publication_extraction(edges: List[Dict[str, Any]]) -> Dict[str, An
         if extractable_pubs:
             edges_with_pubs += 1
 
-        # Group by node pair
-        pair = (edge.get('subject'), edge.get('object'))
-        if pair not in node_pair_edges:
-            node_pair_edges[pair] = []
-        node_pair_edges[pair].append({
+        # Group by (subject, object, predicate) - matches MultiDiGraph key behavior
+        edge_tuple = (edge.get('subject'), edge.get('object'), edge.get('predicate'))
+        if edge_tuple not in edge_tuples:
+            edge_tuples[edge_tuple] = []
+        edge_tuples[edge_tuple].append({
             'predicate': edge.get('predicate'),
             'publications': extractable_pubs,
             'subject': edge.get('subject'),
             'object': edge.get('object'),
         })
 
-    # Analyze collisions
-    unique_pairs = len(node_pair_edges)
-    collision_pairs = {k: v for k, v in node_pair_edges.items() if len(v) > 1}
-    edges_lost = sum(len(v) - 1 for v in collision_pairs.values())
+    # Analyze duplicates (same subject, object, predicate tuple appearing multiple times)
+    unique_tuples = len(edge_tuples)
+    duplicate_groups = {k: v for k, v in edge_tuples.items() if len(v) > 1}
+    duplicate_count = sum(len(v) - 1 for v in duplicate_groups.values())
 
-    # Find publications at risk (on non-final edges in collision groups)
-    publications_at_risk = 0
-    sample_collisions = []
+    # Find publications on duplicate edges
+    # Note: With predicate+index edge keys, all edges are preserved in the graph,
+    # but duplicates may indicate upstream data issues worth flagging
+    publications_on_duplicates = 0
+    sample_duplicates = []
 
-    for pair, edge_list in collision_pairs.items():
-        # Publications from all but the last edge are at risk
-        for edge_info in edge_list[:-1]:
-            publications_at_risk += len(edge_info['publications'])
+    for edge_tuple, edge_list in duplicate_groups.items():
+        # Count publications on duplicate edges (all but first occurrence)
+        for edge_info in edge_list[1:]:
+            publications_on_duplicates += len(edge_info['publications'])
 
         # Collect samples
-        if len(sample_collisions) < 5:
+        if len(sample_duplicates) < 5:
             pubs_by_edge = [
                 f"{e['predicate']}: {len(e['publications'])} pubs"
                 for e in edge_list if e['publications']
             ]
             if pubs_by_edge:  # Only include if there are publications involved
-                sample_collisions.append({
+                sample_duplicates.append({
                     'subject': edge_list[0]['subject'],
                     'object': edge_list[0]['object'],
-                    'edge_count': len(edge_list),
-                    'predicates': [e['predicate'] for e in edge_list],
+                    'predicate': edge_list[0]['predicate'],
+                    'duplicate_count': len(edge_list),
                     'pubs_by_edge': pubs_by_edge,
-                    'kept_predicate': edge_list[-1]['predicate'],
-                    'kept_pubs': edge_list[-1]['publications'][:3],
                 })
 
     return {
         'total_edges': total_edges,
         'edges_with_publications': edges_with_pubs,
-        'unique_node_pairs': unique_pairs,
-        'edges_lost_to_collisions': edges_lost,
-        'collision_pairs_count': len(collision_pairs),
-        'publications_at_risk': publications_at_risk,
-        'sample_collisions': sample_collisions,
-        'has_issues': publications_at_risk > 0,
+        'unique_node_pairs': unique_tuples,
+        'edges_lost_to_collisions': duplicate_count,  # Kept for backward compatibility
+        'collision_pairs_count': len(duplicate_groups),
+        'publications_at_risk': publications_on_duplicates,  # Kept for backward compatibility
+        'sample_collisions': sample_duplicates,  # Kept for backward compatibility
+        'has_issues': duplicate_count > 0,
     }

@@ -9,7 +9,7 @@ Handles:
 
 """
 
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict, Any, Optional, Set, Union
 import networkx as nx
 from pydantic import BaseModel, Field
 import logging
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class KnowledgeGraph(BaseModel):
     """Wrapper for NetworkX graph with metadata."""
 
-    graph: Any = Field(description="NetworkX DiGraph (excluded from serialization)")
+    graph: Any = Field(description="NetworkX MultiDiGraph (excluded from serialization)")
     num_nodes: int = Field(description="Number of nodes")
     num_edges: int = Field(description="Number of edges")
     query_genes: List[str] = Field(description="Input gene CURIEs")
@@ -83,7 +83,7 @@ class GraphBuilder:
         if not edges:
             logger.warning("No edges provided - returning empty graph")
             return KnowledgeGraph(
-                graph=nx.DiGraph(),
+                graph=nx.MultiDiGraph(),
                 num_nodes=0,
                 num_edges=0,
                 query_genes=query_gene_curies,
@@ -116,7 +116,9 @@ class GraphBuilder:
             curie_to_label = self._lookup_node_names(unique_nodes)
 
         # Build NetworkX graph with CURIEs as node IDs
-        graph = nx.DiGraph()
+        # Use MultiDiGraph to preserve multiple edges between same node pair
+        # (e.g., different predicates with different publications)
+        graph = nx.MultiDiGraph()
 
         for i, (subj, obj, pred) in enumerate(zip(subjects, objects, predicates)):
             if subj and obj:  # Skip empty entries
@@ -138,9 +140,15 @@ class GraphBuilder:
                 # Extract confidence scores from all patterns
                 confidence_scores = self._extract_confidence_scores_robust(attributes)
 
+                # Use predicate + index to guarantee unique edge keys in MultiDiGraph
+                # This preserves semantic grouping while preventing any collisions
+                # (even if two edges have identical subject, object, predicate from different sources)
+                edge_key = f"{pred.replace('biolink:', '') if pred else 'edge'}_{i}"
+
                 graph.add_edge(
                     subj,
                     obj,
+                    key=edge_key,  # Edge key for MultiDiGraph
                     predicate=pred,
                     sources=sources,  # Full source information
                     attributes=attributes,  # Complete attributes array
@@ -182,7 +190,7 @@ class GraphBuilder:
 
     def _add_node_attributes(
         self,
-        graph: nx.DiGraph,
+        graph: Union[nx.DiGraph, nx.MultiDiGraph],
         query_gene_curies: List[str],
         curie_to_label: Dict[str, str],
         curie_to_symbol: Dict[str, str],
@@ -246,49 +254,42 @@ class GraphBuilder:
 
     def calculate_gene_frequency(
         self,
-        graph: nx.DiGraph,
+        graph: Union[nx.DiGraph, nx.MultiDiGraph],
         query_genes: List[str],
     ) -> Dict[str, int]:
         """Calculate gene frequency (convergence metric) for each node.
 
-        Gene frequency = number of query genes that have a path to this node.
-        High gene frequency indicates a convergent node.
+        Gene frequency = number of query genes with direct edge connections to this node.
+        High gene frequency indicates a convergent hub where multiple query genes connect.
 
         Args:
-            graph: NetworkX DiGraph
+            graph: NetworkX graph (DiGraph or MultiDiGraph)
             query_genes: List of query gene node IDs
 
         Returns:
-            Dictionary mapping node ID to gene frequency
+            Dictionary mapping node ID to gene frequency (count of directly connected query genes)
         """
         logger.info(f"Calculating gene frequency for {len(query_genes)} query genes...")
 
         gene_frequency = {node: 0 for node in graph.nodes()}
+        query_gene_set = set(query_genes)
 
-        # For each query gene, find all reachable nodes
-        for gene in query_genes:
-            if gene not in graph:
-                logger.warning(f"Query gene {gene} not found in graph")
-                continue
+        # For each node, count how many query genes have direct edges to/from it
+        for node in graph.nodes():
+            # Count unique query genes with direct connections (either direction)
+            connected_genes = set()
 
-            # Find all nodes reachable from this gene (BFS/DFS)
-            reachable = nx.descendants(graph, gene)
-            reachable.add(gene)  # Include the gene itself
+            # Check incoming edges (query gene -> this node)
+            for predecessor in graph.predecessors(node):
+                if predecessor in query_gene_set:
+                    connected_genes.add(predecessor)
 
-            # Increment frequency for all reachable nodes
-            for node in reachable:
-                gene_frequency[node] += 1
+            # Check outgoing edges (this node -> query gene)
+            for successor in graph.successors(node):
+                if successor in query_gene_set:
+                    connected_genes.add(successor)
 
-        # Also count reverse direction (nodes that can reach the gene)
-        for gene in query_genes:
-            if gene not in graph:
-                continue
-
-            # Find all nodes that can reach this gene
-            ancestors = nx.ancestors(graph, gene)
-
-            for node in ancestors:
-                gene_frequency[node] += 1
+            gene_frequency[node] = len(connected_genes)
 
         logger.info(f"Gene frequency calculated. Max frequency: {max(gene_frequency.values()) if gene_frequency else 0}")
 
@@ -296,19 +297,19 @@ class GraphBuilder:
 
     def extract_subgraph(
         self,
-        graph: nx.DiGraph,
+        graph: Union[nx.DiGraph, nx.MultiDiGraph],
         center_nodes: List[str],
         k_hops: int = 1,
-    ) -> nx.DiGraph:
+    ) -> Union[nx.DiGraph, nx.MultiDiGraph]:
         """Extract k-hop subgraph around specified nodes.
 
         Args:
-            graph: Source NetworkX graph
+            graph: Source NetworkX graph (DiGraph or MultiDiGraph)
             center_nodes: Center node IDs
             k_hops: Number of hops to include (default: 1)
 
         Returns:
-            Subgraph as NetworkX DiGraph
+            Subgraph as NetworkX graph (same type as input)
 
         TODO: Implement subgraph extraction for RAG citations (Phase 3)
         """

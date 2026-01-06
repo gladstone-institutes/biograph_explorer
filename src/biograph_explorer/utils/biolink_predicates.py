@@ -430,6 +430,40 @@ def get_predicate_info(predicate_name: str) -> Optional[Dict]:
     return None
 
 
+def get_most_specific_predicate(predicates: List[str]) -> str:
+    """Select the most specific (deepest) predicate from a list.
+
+    Used for meta-edge labels when collapsing parallel edges in visualization.
+    Higher depth = more specific predicate. Ties broken alphabetically.
+
+    Args:
+        predicates: List of predicate strings (with or without biolink: prefix)
+
+    Returns:
+        Most specific predicate (original format preserved)
+    """
+    if not predicates:
+        return ""
+    if len(predicates) == 1:
+        return predicates[0]
+
+    depths = get_predicate_depths()
+
+    # Score each predicate by depth
+    scored = []
+    for pred in predicates:
+        # Normalize for lookup
+        pred_name = pred.replace("biolink:", "").strip()
+        pred_name = _normalize_predicate_name(pred_name)
+        depth = depths.get(pred_name, 0)  # Unknown predicates get depth 0
+        scored.append((depth, pred))
+
+    # Sort by depth descending, then alphabetically for ties
+    scored.sort(key=lambda x: (-x[0], x[1]))
+
+    return scored[0][1]
+
+
 def filter_disease_bp_predicates(
     edges: List[Dict],
     use_informative_only: bool = True,

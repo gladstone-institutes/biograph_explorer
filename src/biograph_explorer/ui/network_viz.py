@@ -12,7 +12,7 @@ Features:
 Phase 2 Status: Implemented with streamlit-cytoscape
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 import networkx as nx
 from networkx.readwrite import json_graph
 from pathlib import Path
@@ -180,7 +180,7 @@ def _flatten_attributes_for_display(attributes: List[Dict[str, Any]]) -> List[st
 
 
 def prepare_cytoscape_elements(
-    graph: nx.DiGraph,
+    graph: Union[nx.DiGraph, nx.MultiDiGraph],
     query_genes: List[str],
     sizing_metric: str = "gene_frequency",
     base_node_size: int = 30,
@@ -193,8 +193,11 @@ def prepare_cytoscape_elements(
     Internal styling attributes are prefixed with '_' and automatically hidden
     by streamlit-cytoscape's infopanel (controlled via hide_underscore_attrs parameter).
 
+    Supports both DiGraph and MultiDiGraph. For MultiDiGraph, each parallel edge
+    becomes a separate Cytoscape element with its own attributes.
+
     Args:
-        graph: NetworkX DiGraph to convert
+        graph: NetworkX graph to convert (DiGraph or MultiDiGraph)
         query_genes: List of query gene node IDs (for highlighting)
         sizing_metric: Metric for node sizing (gene_frequency, pagerank, betweenness, degree)
         base_node_size: Base size for nodes in pixels (default: 30)
@@ -228,10 +231,17 @@ def prepare_cytoscape_elements(
         'attributes', 'sources', 'qualifiers', 'confidence_scores',
         'sentences', 'publications', 'knowledge_source', 'query_result_id'
     }
-    for u, v in graph_copy.edges():
-        for attr in list(graph_copy[u][v].keys()):
-            if attr in edge_exclude_attrs:
-                del graph_copy[u][v][attr]
+    # Handle both DiGraph and MultiDiGraph edge access
+    if isinstance(graph_copy, nx.MultiDiGraph):
+        for u, v, key in graph_copy.edges(keys=True):
+            for attr in list(graph_copy[u][v][key].keys()):
+                if attr in edge_exclude_attrs:
+                    del graph_copy[u][v][key][attr]
+    else:
+        for u, v in graph_copy.edges():
+            for attr in list(graph_copy[u][v].keys()):
+                if attr in edge_exclude_attrs:
+                    del graph_copy[u][v][attr]
 
     cyto_data = json_graph.cytoscape_data(graph_copy)
     elements = cyto_data["elements"]
@@ -354,9 +364,19 @@ def prepare_cytoscape_elements(
         # Note: 'id' must remain unprefixed as it's a structural requirement, not just display
         edge_element["data"]["id"] = f"e{idx}"
 
-        # Get edge data from graph
+        # Get edge data from graph - handle both DiGraph and MultiDiGraph
         if graph.has_edge(source, target):
-            edge_attrs = graph[source][target]
+            if isinstance(graph, nx.MultiDiGraph):
+                # For MultiDiGraph, cytoscape_data preserves 'key' in edge element data
+                edge_key = edge_element["data"].get("key")
+                edge_dict = graph[source][target]
+                if edge_key and edge_key in edge_dict:
+                    edge_attrs = edge_dict[edge_key]
+                else:
+                    # Fallback to first edge (shouldn't happen with proper key handling)
+                    edge_attrs = next(iter(edge_dict.values()))
+            else:
+                edge_attrs = graph[source][target]
 
             # Add predicate (cleaned) as label - user-facing
             predicate = edge_attrs.get("predicate", "")
@@ -535,7 +555,7 @@ def prepare_cytoscape_elements(
     return {"nodes": elements["nodes"], "edges": elements["edges"]}
 
 
-def create_node_styles(graph: nx.DiGraph) -> List["NodeStyle"]:
+def create_node_styles(graph: Union[nx.DiGraph, nx.MultiDiGraph]) -> List["NodeStyle"]:
     """Create NodeStyle objects for each category in the graph.
 
     Args:
@@ -610,7 +630,7 @@ def create_node_styles(graph: nx.DiGraph) -> List["NodeStyle"]:
     return node_styles
 
 
-def create_edge_styles(graph: nx.DiGraph) -> List["EdgeStyle"]:
+def create_edge_styles(graph: Union[nx.DiGraph, nx.MultiDiGraph]) -> List["EdgeStyle"]:
     """Create EdgeStyle objects for each predicate in the graph.
 
     Args:
@@ -766,7 +786,7 @@ def get_layout_config(layout_name: str = "dagre") -> Dict[str, Any]:
 
 
 def render_network_visualization(
-    graph: nx.DiGraph,
+    graph: Union[nx.DiGraph, nx.MultiDiGraph],
     query_genes: List[str],
     sizing_metric: str = "gene_frequency",
     layout: str = "dagre",
@@ -780,7 +800,7 @@ def render_network_visualization(
     """Prepare network visualization data for streamlit-cytoscape component.
 
     Args:
-        graph: NetworkX DiGraph to visualize
+        graph: NetworkX graph to visualize (DiGraph or MultiDiGraph)
         query_genes: List of query gene node IDs (highlighted)
         sizing_metric: Node sizing metric (gene_frequency, pagerank, betweenness, degree)
         layout: Layout algorithm name (cose, fcose, circle, grid, breadthfirst, concentric)
@@ -843,11 +863,11 @@ def render_network_visualization(
 
 
 def sample_graph_for_visualization(
-    graph: nx.DiGraph,
+    graph: Union[nx.DiGraph, nx.MultiDiGraph],
     query_genes: List[str],
     max_intermediates: int = 200,
     disease_curie: Optional[str] = None,
-) -> nx.DiGraph:
+) -> Union[nx.DiGraph, nx.MultiDiGraph]:
     """Sample graph by filtering top intermediate nodes ranked by query gene connectivity.
 
     Sampling strategy:
@@ -859,7 +879,7 @@ def sample_graph_for_visualization(
     6. Build subgraph with selected nodes + their edges
 
     Args:
-        graph: Full NetworkX graph
+        graph: Full NetworkX graph (DiGraph or MultiDiGraph)
         query_genes: Query gene node IDs (always included)
         max_intermediates: Maximum number of intermediate nodes to include (default: 200)
         disease_curie: Optional disease CURIE (always included if present)
@@ -938,12 +958,12 @@ def sample_graph_for_visualization(
     return sampled_graph
 
 
-def get_node_details(node_id: str, graph: nx.DiGraph) -> Dict[str, Any]:
+def get_node_details(node_id: str, graph: Union[nx.DiGraph, nx.MultiDiGraph]) -> Dict[str, Any]:
     """Extract detailed information about a node.
 
     Args:
         node_id: Node identifier (CURIE)
-        graph: NetworkX graph containing the node
+        graph: NetworkX graph containing the node (DiGraph or MultiDiGraph)
 
     Returns:
         Dictionary with node details including edges and sources
@@ -1002,9 +1022,9 @@ def get_node_details(node_id: str, graph: nx.DiGraph) -> Dict[str, Any]:
 
 
 def filter_graph_by_annotations(
-    graph: nx.DiGraph,
+    graph: Union[nx.DiGraph, nx.MultiDiGraph],
     annotation_filters: Dict[str, List[Any]],
-) -> nx.DiGraph:
+) -> Union[nx.DiGraph, nx.MultiDiGraph]:
     """Filter graph by annotation attributes.
 
     Filtering strategy:
@@ -1013,7 +1033,7 @@ def filter_graph_by_annotations(
     3. Edges between included nodes are preserved
 
     Args:
-        graph: Full NetworkX graph
+        graph: Full NetworkX graph (DiGraph or MultiDiGraph)
         annotation_filters: Dict of filter_key -> list of selected values.
             Example: {"go_bp": ["cell cycle"], "go_mf": ["ATP binding"]}
 
@@ -1075,7 +1095,8 @@ def filter_graph_by_annotations(
 
     if not matched_nodes:
         logger.warning("No nodes match annotation filters - returning empty graph")
-        return nx.DiGraph()
+        # Return empty graph of same type as input
+        return type(graph)()
 
     # Build node set:
     # 1. Matched nodes (intermediates that pass the filter)
@@ -1110,11 +1131,11 @@ def filter_graph_by_annotations(
 
 
 def filter_graph_by_category(
-    graph: nx.DiGraph,
+    graph: Union[nx.DiGraph, nx.MultiDiGraph],
     selected_category: str,
     query_genes: List[str],
     disease_curie: Optional[str] = None,
-) -> nx.DiGraph:
+) -> Union[nx.DiGraph, nx.MultiDiGraph]:
     """Filter graph to show only intermediates of the selected category.
 
     Strategy:
@@ -1124,7 +1145,7 @@ def filter_graph_by_category(
     4. Preserve edges between included nodes
 
     Args:
-        graph: Full NetworkX graph
+        graph: Full NetworkX graph (DiGraph or MultiDiGraph)
         selected_category: Category to filter by (e.g., "Protein", "BiologicalProcess")
         query_genes: Query gene CURIEs (included only if connected to category)
         disease_curie: Optional disease CURIE (always included if present)
@@ -1173,11 +1194,11 @@ def filter_graph_by_category(
 
 
 def filter_graph_by_publication(
-    graph: nx.DiGraph,
+    graph: Union[nx.DiGraph, nx.MultiDiGraph],
     selected_publication: str,
     query_genes: List[str],
     disease_curie: Optional[str] = None,
-) -> nx.DiGraph:
+) -> Union[nx.DiGraph, nx.MultiDiGraph]:
     """Filter graph to show only edges with the selected publication.
 
     Strategy:
@@ -1188,7 +1209,7 @@ def filter_graph_by_publication(
     5. Remove edges that don't have the selected publication
 
     Args:
-        graph: Full NetworkX graph
+        graph: Full NetworkX graph (DiGraph or MultiDiGraph)
         selected_publication: Publication ID to filter by (e.g., "PMID:12345")
         query_genes: Query gene CURIEs (always included)
         disease_curie: Optional disease CURIE (always included if present)
@@ -1211,24 +1232,39 @@ def filter_graph_by_publication(
     if disease_curie and disease_curie in graph:
         nodes_to_include.add(disease_curie)
 
-    # Find edges with this publication
-    edges_to_keep = []
-    for u, v, data in graph.edges(data=True):
-        pubs = data.get('publications', []) or []
-        normalized_pubs = [normalize_publication_id(p) for p in pubs if p]
-        if normalized_pub in normalized_pubs:
-            edges_to_keep.append((u, v))
-            nodes_to_include.add(u)
-            nodes_to_include.add(v)
+    # Find edges with this publication - handle both DiGraph and MultiDiGraph
+    edges_to_keep = set()  # Use set for O(1) lookup
+    if isinstance(graph, nx.MultiDiGraph):
+        for u, v, key, data in graph.edges(keys=True, data=True):
+            pubs = data.get('publications', []) or []
+            normalized_pubs = [normalize_publication_id(p) for p in pubs if p]
+            if normalized_pub in normalized_pubs:
+                edges_to_keep.add((u, v, key))
+                nodes_to_include.add(u)
+                nodes_to_include.add(v)
+    else:
+        for u, v, data in graph.edges(data=True):
+            pubs = data.get('publications', []) or []
+            normalized_pubs = [normalize_publication_id(p) for p in pubs if p]
+            if normalized_pub in normalized_pubs:
+                edges_to_keep.add((u, v))
+                nodes_to_include.add(u)
+                nodes_to_include.add(v)
 
     # Create filtered subgraph with all relevant nodes
     filtered_graph = graph.subgraph(nodes_to_include).copy()
 
     # Remove edges that don't have the selected publication
-    edges_in_subgraph = list(filtered_graph.edges())
-    for edge in edges_in_subgraph:
-        if edge not in edges_to_keep:
-            filtered_graph.remove_edge(*edge)
+    if isinstance(filtered_graph, nx.MultiDiGraph):
+        edges_in_subgraph = list(filtered_graph.edges(keys=True))
+        for u, v, key in edges_in_subgraph:
+            if (u, v, key) not in edges_to_keep:
+                filtered_graph.remove_edge(u, v, key=key)
+    else:
+        edges_in_subgraph = list(filtered_graph.edges())
+        for u, v in edges_in_subgraph:
+            if (u, v) not in edges_to_keep:
+                filtered_graph.remove_edge(u, v)
 
     logger.info(
         f"Publication filter '{selected_publication}': {filtered_graph.number_of_nodes()} nodes, "
