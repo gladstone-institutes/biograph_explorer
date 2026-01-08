@@ -1583,6 +1583,8 @@ if st.session_state.graph:
         if viz_data:
             # Build dynamic key that changes when layout or filters change
             # This forces Cytoscape to re-run the layout algorithm instead of preserving old positions
+            # EXCLUDE styling-only parameters (base_node_size, use_metric_sizing, edge_width, collapse_counter)
+            # to preserve manual node positions when only visual properties change
 
             # Include annotation filter state in key so layout re-runs when filters change
             filter_state = st.session_state.annotation_filters
@@ -1595,12 +1597,12 @@ if st.session_state.graph:
                 filter_hash = 0
 
             pub_filter_hash = hash(pub_filter) if pub_filter else 0
-            # Include ALL visualization parameters in key to force re-render when any change
-            # This ensures meta-edges stay collapsed when sliders/dropdowns change
+            # Only include graph structure and layout parameters in key
+            # Styling parameters (node size, edge width, collapse_counter) excluded to preserve positions
             cytoscape_key = (
                 f"biograph_network_{layout}_{filter_hash}_{category_filter}_{pub_filter_hash}_"
-                f"{max_intermediates}_{sizing_metric}_{base_node_size}_{use_metric_sizing}_{edge_width}_"
-                f"{st.session_state.collapse_counter}"
+                f"{max_intermediates}_{sizing_metric}"
+                # Note: base_node_size, use_metric_sizing, edge_width, collapse_counter excluded to preserve positions
             )
 
             # Compute priority predicate for edge collapsing
@@ -1642,18 +1644,17 @@ if st.session_state.graph:
 
             # Render component with edge collapsing enabled
             # When debug_mode is True, show all attributes (hide_underscore_attrs=False)
-            # Meta-edge styling to match regular edges (font size, width, text rotation)
-            meta_edge_font_size = max(8, min(14, 6 + edge_width))
+            # Meta-edges inherit styling from EdgeStyle (width, font-size are set statically there)
+            # This keeps meta_edge_style stable across slider changes, preserving collapse state
 
             # Note: Edge highlighting for publication filter is handled via data selector
             # 'edge[_has_filtered_pub = true]' in get_highlighted_edge_style()
             # This approach colors only edges with the specific publication, not all edges
             # with a matching predicate.
 
-            # Meta-edge styling: neutral gray base, color comes from data selector
+            # Meta-edge styling: only set properties that don't change with sliders
+            # Width and font-size are inherited from EdgeStyle to keep this dict stable
             meta_edge_style = {
-                "width": edge_width,
-                "font-size": meta_edge_font_size,
                 "text-rotation": "autorotate",  # Align label with edge line
             }
 

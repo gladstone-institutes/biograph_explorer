@@ -190,9 +190,7 @@ def prepare_cytoscape_elements(
     graph: Union[nx.DiGraph, nx.MultiDiGraph],
     query_genes: List[str],
     sizing_metric: str = "gene_frequency",
-    base_node_size: int = 30,
     use_metric_sizing: bool = True,
-    edge_width: int = 2,
 ) -> Dict[str, List[Dict]]:
     """Convert NetworkX graph to Cytoscape.js elements format.
 
@@ -207,9 +205,7 @@ def prepare_cytoscape_elements(
         graph: NetworkX graph to convert (DiGraph or MultiDiGraph)
         query_genes: List of query gene node IDs (for highlighting)
         sizing_metric: Metric for node sizing (gene_frequency, pagerank, betweenness, degree)
-        base_node_size: Base size for nodes in pixels (default: 30)
         use_metric_sizing: If True, size nodes by metric; if False, use uniform size
-        edge_width: Width of edges in pixels (default: 2)
 
     Returns:
         Dictionary with "nodes" and "edges" lists in Cytoscape.js format
@@ -312,26 +308,21 @@ def prepare_cytoscape_elements(
             node_element["data"]["_bg_height"] = "70%"
             node_element["data"]["_bg_position_y"] = "50%"
 
-        # Calculate node size
+        # Store normalized size factor (0-1) instead of absolute size
+        # This keeps node elements stable when base_node_size changes
         if use_metric_sizing:
-            # Scale around base_node_size: range is base_node_size ± 15px
-            min_size = max(10, base_node_size - 15)
-            max_size = base_node_size + 15
-            size_range = max_size - min_size
-            node_size = min_size + (normalized_metrics.get(node_id, 0.5) * size_range)
+            # Normalized metric value (0-1)
+            size_factor = normalized_metrics.get(node_id, 0.5)
         else:
-            # Uniform sizing - all nodes same size
-            node_size = base_node_size
+            # Uniform sizing - all nodes same factor
+            size_factor = 1.0
 
-        # Query-derived nodes (triangles) get larger size (10% bigger, minimum base_node_size)
+        # Query-derived nodes (triangles) get larger size factor (10% boost)
         if use_triangle:
-            node_size = max(node_size * 1.1, base_node_size)
+            size_factor = min(size_factor * 1.1, 1.0)
 
-        node_element["data"]["_size"] = round(node_size, 1)
-
-        # Calculate font size proportional to node size (internal - for styling)
-        font_size = max(8, min(14, round(node_size * 0.25)))
-        node_element["data"]["_font_size"] = font_size
+        # Store the size factor (stable across base_node_size changes)
+        node_element["data"]["_size_factor"] = round(size_factor, 3)
 
         # Add metrics for tooltip/inspection (user-facing)
         node_element["data"]["gene_frequency"] = node_attrs.get("gene_frequency", 0)
@@ -556,12 +547,6 @@ def prepare_cytoscape_elements(
             # Store flag in data for debugging/info panel
             edge_element["data"]["_has_filtered_pub"] = has_filtered_pub
 
-        # Add edge width and scaled font size - internal styling
-        edge_element["data"]["_edge_width"] = edge_width
-        # Scale font: 8px at width 1, up to 14px at width 10
-        edge_font_size = max(8, min(14, 6 + edge_width))
-        edge_element["data"]["_edge_font_size"] = edge_font_size
-
         # Add edge color - internal styling
         # This sets the color directly in the edge data, which survives collapse/expand
         # Publication-filtered edges get teal, others get default gray
@@ -579,11 +564,17 @@ def prepare_cytoscape_elements(
     return {"nodes": elements["nodes"], "edges": elements["edges"]}
 
 
-def create_node_styles(graph: Union[nx.DiGraph, nx.MultiDiGraph]) -> List["NodeStyle"]:
+def create_node_styles(
+    graph: Union[nx.DiGraph, nx.MultiDiGraph],
+    base_node_size: int = 30,
+    use_metric_sizing: bool = True
+) -> List["NodeStyle"]:
     """Create NodeStyle objects for each category in the graph.
 
     Args:
         graph: NetworkX graph containing nodes with "category" attribute
+        base_node_size: Base size for nodes in pixels (default: 30)
+        use_metric_sizing: Whether to use metric-based sizing (default: True)
 
     Returns:
         List of NodeStyle objects, one per unique category
@@ -597,19 +588,32 @@ def create_node_styles(graph: Union[nx.DiGraph, nx.MultiDiGraph]) -> List["NodeS
         category = graph.nodes[node].get("category", "Other")
         categories.add(category)
 
+    # Calculate size range based on base_node_size and metric sizing
+    if use_metric_sizing:
+        # Scale around base_node_size: range is base_node_size ± 15px
+        min_size = max(10, base_node_size - 15)
+        max_size = base_node_size + 15
+    else:
+        # Uniform sizing - all nodes same size
+        min_size = base_node_size
+        max_size = base_node_size
+
+    # Calculate font size range (proportional to node size)
+    min_font = max(8, round(min_size * 0.25))
+    max_font = min(14, round(max_size * 0.25))
+
     # Create NodeStyle for each category
-    # custom_styles enables dynamic node sizing from node data
+    # Use mapData to calculate size from _size_factor (keeps elements stable)
     node_styles = []
     for category in sorted(categories):
         color = CATEGORY_COLORS.get(category, CATEGORY_COLORS["Other"])
         icon = CATEGORY_ICONS.get(category)
 
         # Use "name" as caption (displays gene symbol or node label)
-        # custom_styles reads size from node data for dynamic sizing
-        # Label styling: dynamic font size + background box for visibility
-        # Note: Internal styling attributes use underscore prefix (e.g., _size, _node_shape)
+        # mapData calculates size from _size_factor (0-1) * size range
+        # This keeps node elements stable when base_node_size changes
         label_styles = {
-            "font-size": "data(_font_size)",
+            "font-size": f"mapData(_size_factor, 0, 1, {min_font}, {max_font})",
             "text-background-color": "#ffffff",
             "text-background-opacity": 0.95,
             "text-background-padding": "2px",
@@ -624,8 +628,8 @@ def create_node_styles(graph: Union[nx.DiGraph, nx.MultiDiGraph]) -> List["NodeS
                     caption="name",
                     icon=icon,
                     custom_styles={
-                        "width": "data(_size)",
-                        "height": "data(_size)",
+                        "width": f"mapData(_size_factor, 0, 1, {min_size}, {max_size})",
+                        "height": f"mapData(_size_factor, 0, 1, {min_size}, {max_size})",
                         "shape": "data(_node_shape)",
                         "background-width": "data(_bg_width)",
                         "background-height": "data(_bg_height)",
@@ -642,8 +646,8 @@ def create_node_styles(graph: Union[nx.DiGraph, nx.MultiDiGraph]) -> List["NodeS
                     color=color,
                     caption="name",
                     custom_styles={
-                        "width": "data(_size)",
-                        "height": "data(_size)",
+                        "width": f"mapData(_size_factor, 0, 1, {min_size}, {max_size})",
+                        "height": f"mapData(_size_factor, 0, 1, {min_size}, {max_size})",
                         "shape": "data(_node_shape)",
                         "opacity": "data(_opacity)",
                         **label_styles,
@@ -654,11 +658,12 @@ def create_node_styles(graph: Union[nx.DiGraph, nx.MultiDiGraph]) -> List["NodeS
     return node_styles
 
 
-def create_edge_styles(graph: Union[nx.DiGraph, nx.MultiDiGraph]) -> List["EdgeStyle"]:
+def create_edge_styles(graph: Union[nx.DiGraph, nx.MultiDiGraph], edge_width: int = 2) -> List["EdgeStyle"]:
     """Create EdgeStyle objects for each predicate in the graph.
 
     Args:
         graph: NetworkX graph containing edges with "predicate" attribute
+        edge_width: Edge width in pixels (default: 2)
 
     Returns:
         List of EdgeStyle objects, one per unique predicate
@@ -673,12 +678,14 @@ def create_edge_styles(graph: Union[nx.DiGraph, nx.MultiDiGraph]) -> List["EdgeS
         if predicate:
             predicates.add(predicate)
 
-    # Edge styling: dynamic width, font size, and color
+    # Edge styling: static width and font size, dynamic color
+    # Width and font size are static values applied uniformly to all edges
     # Colors are set per-edge in prepare_cytoscape_elements() via _line_color data attribute
     # This allows publication-filtered edges to be teal while others use default colors
+    edge_font_size = max(8, min(14, 6 + edge_width))  # Scale font: 8px at width 1, up to 14px at width 10
     edge_custom_styles = {
-        "width": "data(_edge_width)",
-        "font-size": "data(_edge_font_size)",
+        "width": edge_width,  # Static value
+        "font-size": edge_font_size,  # Static value
         "line-color": "data(_line_color)",
         "target-arrow-color": "data(_target_arrow_color)",
     }
@@ -896,15 +903,18 @@ def render_network_visualization(
 
         # Prepare Cytoscape elements
         elements = prepare_cytoscape_elements(
-            graph, query_genes, sizing_metric, base_node_size, use_metric_sizing, edge_width
+            graph, query_genes, sizing_metric, use_metric_sizing
         )
 
         # Create node and edge styles
-        node_styles = create_node_styles(graph)
-        edge_styles = create_edge_styles(graph)
+        node_styles = create_node_styles(graph, base_node_size=base_node_size, use_metric_sizing=use_metric_sizing)
+        edge_styles = create_edge_styles(graph, edge_width=edge_width)
 
-        # Note: Edge colors are set per-edge in prepare_cytoscape_elements()
-        # via _line_color and _target_arrow_color data attributes
+        # Note: Element stability for collapse state preservation:
+        # - Edge colors: Set per-edge via _line_color/_target_arrow_color (for pub filtering)
+        # - Edge width/font: Applied statically via EdgeStyle (not in element data)
+        # - Node size/font: Calculated via mapData from stable _size_factor (not absolute size)
+        # This keeps elements stable across slider changes, preserving meta-edge collapse
 
         # Get layout configuration
         layout_config = get_layout_config(layout)
