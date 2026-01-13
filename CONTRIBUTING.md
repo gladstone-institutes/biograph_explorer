@@ -40,18 +40,18 @@ If you are proposing a feature:
 
 ## Get Started!
 
-Ready to contribute? Here's how to set up `biograph_explorer` for local development.
+Ready to contribute? Here's how to set up `geneset_translator` for local development.
 
-1. Download a copy of `biograph_explorer` locally.
+1. Download a copy of `geneset_translator` locally.
 
-2. Create and activate a conda environment for `biograph_explorer`:
+2. Create and activate a conda environment for `geneset_translator`:
 
     ```console
-    $ conda create -n biograph_explorer python=3.10
-    $ conda activate biograph_explorer
+    $ conda create -n geneset_translator python=3.10
+    $ conda activate geneset_translator
     ```
 
-3. Install `biograph_explorer` using `poetry`:
+3. Install `geneset_translator` using `poetry`:
 
     ```console
     $ poetry install
@@ -77,5 +77,5 @@ Before you submit a pull request, check that it meets these guidelines:
 
 ## Code of Conduct
 
-Please note that the `biograph_explorer` project is released with a
+Please note that the `geneset_translator` project is released with a
 Code of Conduct. By contributing to this project you agree to abide by its terms.

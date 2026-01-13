@@ -11,8 +11,8 @@ import networkx as nx
 import streamlit as st
 from streamlit_cytoscape import streamlit_cytoscape
 
-from biograph_explorer.core.llm_summarizer import CitationGraph
-from biograph_explorer.ui.network_viz import render_network_visualization
+from geneset_translator.core.llm_summarizer import CitationGraph
+from geneset_translator.ui.network_viz import render_network_visualization
 
 logger = logging.getLogger(__name__)
 

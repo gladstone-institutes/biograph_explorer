@@ -1,6 +1,6 @@
-"""BioGraph Explorer - Streamlit Application
+"""GeneSet Translator - Streamlit Application
 
-Main Streamlit app for multi-gene TRAPI query integration with NetworkX clustering.
+Explore biomedical knowledge graphs for your gene sets via NCATS Translator.
 """
 
 import streamlit as st
@@ -15,20 +15,20 @@ from typing import Dict, Any
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-from biograph_explorer.core import TRAPIClient, GraphBuilder
-from biograph_explorer.utils import validate_gene_list, validate_disease_curie, ValidationError
-from biograph_explorer.utils.biolink_predicates import (
+from geneset_translator.core import TRAPIClient, GraphBuilder
+from geneset_translator.utils import validate_gene_list, validate_disease_curie, ValidationError
+from geneset_translator.utils.biolink_predicates import (
     GRANULARITY_PRESETS,
     get_allowed_predicates_for_display,
 )
-from biograph_explorer.utils.infores_utils import (
+from geneset_translator.utils.infores_utils import (
     download_infores_catalog,
     parse_infores_catalog,
     extract_unique_sources,
     filter_relevant_infores,
     generate_source_summary,
 )
-from biograph_explorer.ui.summary_tab import render_summary_tab
+from geneset_translator.ui.summary_tab import render_summary_tab
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -111,7 +111,7 @@ def _build_query_export(response) -> Dict[str, Any]:
 
 # Page config
 st.set_page_config(
-    page_title="BioGraph Explorer",
+    page_title="GeneSet Translator",
     page_icon=":material/biotech:",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -156,8 +156,8 @@ if 'name_search_filter' not in st.session_state:
     st.session_state.name_search_filter = ""
 
 # Title
-st.markdown("### :material/biotech: BioGraph Explorer")
-st.caption("Multi-gene TRAPI query integration with NetworkX graph analysis and visualization")
+st.markdown("### :material/biotech: GeneSet Translator")
+st.caption("Explore biomedical knowledge graphs for your gene sets via NCATS Translator")
 
 # Sidebar: Input Configuration
 st.sidebar.header(":material/input: Input Configuration")
@@ -166,7 +166,7 @@ st.sidebar.header(":material/input: Input Configuration")
 input_method = st.sidebar.radio(
     "Input Method",
     ["Example Dataset", "Upload CSV", "Manual Entry", "Load Cached Query"],
-    index=0
+    index=1
 )
 
 genes = []
@@ -335,7 +335,7 @@ else:  # Load Cached Query
                     else:
                         # Annotations not in cache - fetch from API
                         try:
-                            from biograph_explorer.core import NodeAnnotator
+                            from geneset_translator.core import NodeAnnotator
                             annotator = NodeAnnotator(cache_dir=Path("data/cache/annotations"))
                             kg.graph, annotation_metadata = annotator.annotate_graph(
                                 kg.graph,
@@ -394,7 +394,7 @@ else:  # Load Cached Query
                     st.session_state.disease_curie = cached_response.target_disease
 
                     # Validate publication extraction (detect duplicate edges)
-                    from biograph_explorer.utils.publication_utils import validate_publication_extraction
+                    from geneset_translator.utils.publication_utils import validate_publication_extraction
                     pub_validation = validate_publication_extraction(cached_response.edges)
                     st.session_state.pub_validation = pub_validation
                     if pub_validation["has_issues"]:
@@ -740,7 +740,7 @@ if run_query:
         # Step 3.5: Annotate nodes with metadata from Node Annotator API
         status_text.text("Annotating nodes with metadata...")
         try:
-            from biograph_explorer.core import NodeAnnotator
+            from geneset_translator.core import NodeAnnotator
             annotator = NodeAnnotator(cache_dir=Path("data/cache/annotations"))
             kg.graph, annotation_metadata = annotator.annotate_graph(
                 kg.graph,
@@ -823,7 +823,7 @@ if run_query:
         status_text.markdown(":material/check_circle: Analysis complete!")
 
         # Validate publication extraction (detect duplicate edges)
-        from biograph_explorer.utils.publication_utils import validate_publication_extraction
+        from geneset_translator.utils.publication_utils import validate_publication_extraction
         pub_validation = validate_publication_extraction(response.edges)
         st.session_state.pub_validation = pub_validation
         if pub_validation["has_issues"]:
@@ -1033,12 +1033,12 @@ if st.session_state.graph:
         # Publication Evidence section
         st.subheader("Publication Evidence")
         if st.session_state.graph and st.session_state.graph.number_of_edges() > 0:
-            from biograph_explorer.utils.publication_utils import (
+            from geneset_translator.utils.publication_utils import (
                 get_publication_frequency,
                 get_publication_frequency_by_category,
                 format_publication_display,
             )
-            from biograph_explorer.ui.network_viz import CATEGORY_COLORS
+            from geneset_translator.ui.network_viz import CATEGORY_COLORS
 
             # Get frequency by category for stacked bars
             pub_freq = get_publication_frequency(st.session_state.graph)
@@ -1330,7 +1330,7 @@ if st.session_state.graph:
 
         with col5:
             # Publication filter dropdown - filtered by selected category
-            from biograph_explorer.utils.publication_utils import (
+            from geneset_translator.utils.publication_utils import (
                 get_publication_frequency_by_category,
                 format_publication_display,
             )
@@ -1644,7 +1644,7 @@ if st.session_state.graph:
                 st.session_state.gene_group_filter = "All Groups"
 
         # Render streamlit-cytoscape visualization
-        from biograph_explorer.ui.network_viz import (
+        from geneset_translator.ui.network_viz import (
             render_network_visualization,
             filter_graph_by_annotations,
             filter_graph_by_category,
@@ -1833,7 +1833,7 @@ if st.session_state.graph:
             # Compute priority predicate for edge collapsing
             # When publication filter is active, prioritize predicates from edges with the publication
             # Otherwise, use the most specific predicate (highest biolink depth) as the meta-edge label
-            from biograph_explorer.utils.biolink_predicates import get_predicate_depths
+            from geneset_translator.utils.biolink_predicates import get_predicate_depths
             all_predicates = set()
             filtered_pub_predicates = set()  # Predicates from edges with the filtered publication
 
@@ -1908,7 +1908,7 @@ if st.session_state.graph:
             """)
 
             with st.expander("Legend", expanded=False):
-                from biograph_explorer.ui.network_viz import CATEGORY_COLORS, HIGHLIGHT_EDGE_COLOR, DEFAULT_EDGE_COLOR
+                from geneset_translator.ui.network_viz import CATEGORY_COLORS, HIGHLIGHT_EDGE_COLOR, DEFAULT_EDGE_COLOR
 
                 legend_cols = st.columns([1, 1, 1])
 
@@ -1948,4 +1948,4 @@ if st.session_state.graph:
 
 # Footer
 st.divider()
-st.markdown("**BioGraph Explorer** | Built with Streamlit, NetworkX, TCT, and Cytoscape.js")
+st.markdown("**GeneSet Translator** | Built with Streamlit, NetworkX, TCT, and Cytoscape.js")

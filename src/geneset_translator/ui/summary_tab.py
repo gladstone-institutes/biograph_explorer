@@ -12,7 +12,7 @@ from typing import List, Dict
 import networkx as nx
 import streamlit as st
 
-from biograph_explorer.core.llm_summarizer import LLMSummarizer, SummaryData, CitationGraph, StagedCategoryQuery
+from geneset_translator.core.llm_summarizer import LLMSummarizer, SummaryData, CitationGraph, StagedCategoryQuery
 
 logger = logging.getLogger(__name__)
 
@@ -177,7 +177,7 @@ def render_summary_tab(
         stored_min_gene_freq = st.session_state.get('min_gene_frequency', min_gene_frequency)
 
         for i, category in enumerate(selected_categories):
-            status.markdown(f"🤖 Generating summary for **{category}**...")
+            status.markdown(f"### 🤖 Generating summary for **{category}**...")
 
             try:
                 summary_data = summarizer.generate_category_summary(
@@ -380,7 +380,7 @@ def render_citation_card(citation: CitationGraph, category: str, graph: nx.Multi
     if hasattr(st.session_state, 'active_citation'):
         active = st.session_state.active_citation
         if active['citation'].citation_id == citation.citation_id and active['category'] == category:
-            from biograph_explorer.ui.citation_viewer import render_citation_viewer
+            from geneset_translator.ui.citation_viewer import render_citation_viewer
             with st.container(border=True):
                 st.markdown("##### Citation Graph Viewer")
                 render_citation_viewer(citation, graph, query_genes=query_genes, category=category)

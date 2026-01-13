@@ -31,7 +31,7 @@ try:
 except ImportError:
     TCT_AVAILABLE = False
 
-from biograph_explorer.utils.biolink_predicates import filter_predicates_by_granularity
+from geneset_translator.utils.biolink_predicates import filter_predicates_by_granularity
 
 logger = logging.getLogger(__name__)
 
@@ -576,7 +576,7 @@ class TRAPIClient:
             intermediate_categories: Categories requested
             log_file: Path to log file (default: data/logs/api_queries_{date}.log)
         """
-        from biograph_explorer.config.settings import get_settings
+        from geneset_translator.config.settings import get_settings
 
         if log_file is None:
             settings = get_settings()

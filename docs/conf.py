@@ -6,7 +6,7 @@
 
 # -- Project information -----------------------------------------------------
 
-project = u"biograph_explorer"
+project = u"geneset_translator"
 copyright = u"2025, Natalie Gill"
 author = u"Natalie Gill"
 

@@ -1,4 +1,4 @@
-"""Streamlit UI modules for BioGraph Explorer.
+"""Streamlit UI modules for GeneSet Translator.
 
 Provides:
 - Cytoscape.js network visualization via st-link-analysis

@@ -1,7 +1,7 @@
 """Tests for network visualization stability and collapse state preservation."""
 import pytest
 import networkx as nx
-from biograph_explorer.ui.network_viz import (
+from geneset_translator.ui.network_viz import (
     prepare_cytoscape_elements,
     create_edge_styles,
 )
@@ -193,7 +193,7 @@ def test_node_styles_use_mapdata_for_sizing():
     This test ensures that node size is calculated dynamically via mapData,
     not read from absolute size values in element data.
     """
-    from biograph_explorer.ui.network_viz import create_node_styles
+    from geneset_translator.ui.network_viz import create_node_styles
 
     G = nx.MultiDiGraph()
     G.add_node("A", category="Gene")

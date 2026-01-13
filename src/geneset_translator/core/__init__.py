@@ -1,4 +1,4 @@
-"""Core modules for BioGraph Explorer.
+"""Core modules for GeneSet Translator.
 
 Contains the main business logic:
 - TRAPI client for querying Translator APIs

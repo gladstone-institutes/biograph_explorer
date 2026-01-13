@@ -1,8 +1,8 @@
 """Tests for input validators."""
 
 import pytest
-from biograph_explorer.utils import validate_gene_list, validate_disease_curie, ValidationError
-from biograph_explorer.utils.validators import validate_curie, validate_convergence_threshold
+from geneset_translator.utils import validate_gene_list, validate_disease_curie, ValidationError
+from geneset_translator.utils.validators import validate_curie, validate_convergence_threshold
 
 
 class TestGeneListValidation:

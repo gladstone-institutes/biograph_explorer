@@ -7,7 +7,7 @@ import pytest
 import networkx as nx
 from unittest.mock import MagicMock, patch
 
-from biograph_explorer.core.hpa_client import HPAClient, HPAAnnotation
+from geneset_translator.core.hpa_client import HPAClient, HPAAnnotation
 
 
 class TestHPAAnnotation:

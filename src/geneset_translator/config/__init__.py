@@ -1,4 +1,4 @@
-"""Configuration module for BioGraph Explorer.
+"""Configuration module for GeneSet Translator.
 
 Handles application settings, logging configuration, and environment variables.
 

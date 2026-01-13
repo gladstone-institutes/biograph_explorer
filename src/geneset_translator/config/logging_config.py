@@ -1,4 +1,4 @@
-"""Logging configuration for BioGraph Explorer.
+"""Logging configuration for GeneSet Translator.
 
 Sets up structured logging with appropriate levels for:
 - TRAPI queries (INFO for successes, WARNING for failures)

@@ -1487,7 +1487,7 @@ def filter_graph_by_publication(
     Returns:
         Filtered subgraph with edges marked for highlighting
     """
-    from biograph_explorer.utils.publication_utils import normalize_publication_id
+    from geneset_translator.utils.publication_utils import normalize_publication_id
 
     if not selected_publication:
         return graph

@@ -1,4 +1,4 @@
-"""Tests for BioGraph Explorer package.
+"""Tests for GeneSet Translator package.
 
 Tests:
 - Package initialization
@@ -7,7 +7,7 @@ Tests:
 
 """
 
-from biograph_explorer import __version__
+from geneset_translator import __version__
 
 
 class TestPackage:

@@ -3,7 +3,7 @@
 # You can set these variables from the command line.
 SPHINXOPTS    =
 SPHINXBUILD   = python -msphinx
-SPHINXPROJ    = biograph_explorer
+SPHINXPROJ    = geneset_translator
 SOURCEDIR     = .
 BUILDDIR      = _build
 

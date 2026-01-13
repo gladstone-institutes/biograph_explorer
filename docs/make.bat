@@ -9,7 +9,7 @@ if "%SPHINXBUILD%" == "" (
 )
 set SOURCEDIR=.
 set BUILDDIR=_build
-set SPHINXPROJ=biograph_explorer
+set SPHINXPROJ=geneset_translator
 
 if "%1" == "" goto help
 

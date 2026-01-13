@@ -1,4 +1,4 @@
-"""Input validation for BioGraph Explorer.
+"""Input validation for GeneSet Translator.
 
 Validates:
 - Gene symbol lists (HUGO format, non-empty, reasonable size)

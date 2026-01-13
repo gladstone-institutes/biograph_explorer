@@ -1,4 +1,4 @@
-"""Publication analysis utilities for BioGraph Explorer."""
+"""Publication analysis utilities for GeneSet Translator."""
 import re
 from typing import Dict, List, Any, Optional
 import networkx as nx

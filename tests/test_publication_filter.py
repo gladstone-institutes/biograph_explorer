@@ -1,8 +1,8 @@
 """Tests for publication filter edge marking and styling."""
 import pytest
 import networkx as nx
-from biograph_explorer.ui.network_viz import filter_graph_by_publication
-from biograph_explorer.utils.biolink_predicates import get_predicate_depths
+from geneset_translator.ui.network_viz import filter_graph_by_publication
+from geneset_translator.utils.biolink_predicates import get_predicate_depths
 
 
 def create_test_graph_with_publications():

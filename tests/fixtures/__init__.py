@@ -1,4 +1,4 @@
-"""Test fixtures for BioGraph Explorer tests.
+"""Test fixtures for GeneSet Translator tests.
 
 Contains:
 - alzheimers_test_case.json: Alzheimer's disease test case with expected results

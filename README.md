@@ -1,12 +1,12 @@
-# BioGraph Explorer 🧬
+# GeneSet Translator
 
 **Status**: Phase 3 Complete ✅ | Phase 4 Planning 📋
 
-Streamlit application for exploring biomedical knowledge graphs through multi-gene TRAPI queries, network clustering, and interactive visualization.
+Explore biomedical knowledge graphs for your gene sets via NCATS Translator.
 
 ## Overview
 
-BioGraph Explorer is a research tool for exploring different approaches to high-dimensional biomedical queries using the NCATS Translator knowledge graph system:
+GeneSet Translator is a research tool for exploring different approaches to high-dimensional biomedical queries using the NCATS Translator knowledge graph system:
 
 1. **TRAPI Query Execution**: Executes multi-gene pathfinder queries from NCATS Translator APIs using TCT (Translator Component Toolkit)
 2. **Result Augmentation**: Enriches intermediate nodes with additional information from external data sources beyond what Translator returns (not implemented yet)
@@ -71,8 +71,8 @@ The goal is to discover effective workflows for transforming complex high dimens
 
 ```bash
 # Clone repository
-git clone https://github.com/gladstone-institutes/biograph_explorer.git
-cd biograph_explorer
+git clone https://github.com/gladstone-institutes/geneset_translator.git
+cd geneset_translator
 
 # Install with Poetry
 poetry install
@@ -104,7 +104,7 @@ streamlit run app.py
 ```
 
 
-![BioGraph Explorer Main Interface](static/images/main_page.png)   
+![GeneSet Translator Main Interface](static/images/main_page.png)
 
 
 ### 3. Try an Example Query
@@ -125,7 +125,7 @@ The app displays results in tabs:
 
 ### 5. Try Your Own Genes
 
-- Create a CSV with a `gene_symbol` column (see [data/test_genes/covid19_genes.csv](data/test_genes/covid19_genes.csv) for format) or enter genes manually in the sidebar. 
+- Create a CSV with a `gene_symbol` column (see [data/test_genes/covid19_genes.csv](data/test_genes/covid19_genes.csv) for format) or enter genes manually in the sidebar.
 
 ## Understanding Your Results
 
@@ -157,7 +157,7 @@ The app displays results in tabs:
 
 ```bash
 poetry run pytest
-poetry run pytest --cov=src/biograph_explorer
+poetry run pytest --cov=src/geneset_translator
 ```
 
 ### Build Documentation
@@ -191,9 +191,9 @@ poetry add <package-name>
 - View individual communities instead of full graph
 
 
-## Acknowledgements   
+## Acknowledgements
 
-`biograph_explorer` was created with [`cookiecutter`](https://cookiecutter.readthedocs.io/en/latest/) and the `py-pkgs-cookiecutter` [template](https://github.com/py-pkgs/py-pkgs-cookiecutter). The streamlit theme was created by github user [jmedia65](https://github.com/jmedia65/awesome-streamlit-themes).
+`geneset_translator` was created with [`cookiecutter`](https://cookiecutter.readthedocs.io/en/latest/) and the `py-pkgs-cookiecutter` [template](https://github.com/py-pkgs/py-pkgs-cookiecutter). The streamlit theme was created by github user [jmedia65](https://github.com/jmedia65/awesome-streamlit-themes).
 
 ## AI Disclosure Statement
 
@@ -203,13 +203,13 @@ Generative AI tools (Claude Code, Anthropic) were used as coding assistants duri
 
 MIT License - Created by Natalie Gill
 
-If you use BioGraph Explorer in your research:
+If you use GeneSet Translator in your research:
 
 ```bibtex
-@software{biograph_explorer,
+@software{geneset_translator,
   author = {Gill, Natalie},
-  title = {BioGraph Explorer: Multi-gene TRAPI Query Integration with Network Analysis},
+  title = {GeneSet Translator: Explore Biomedical Knowledge Graphs for Gene Sets via NCATS Translator},
   year = {2025},
-  url = {https://github.com/gladstone-institutes/biograph_explorer}
+  url = {https://github.com/gladstone-institutes/geneset_translator}
 }
 ```

@@ -1,4 +1,4 @@
-"""Utility modules for BioGraph Explorer.
+"""Utility modules for GeneSet Translator.
 
 Provides:
 - Input validation for gene lists and disease CURIEs

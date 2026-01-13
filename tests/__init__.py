@@ -1,8 +1,8 @@
-"""Test suite for BioGraph Explorer.
+"""Test suite for GeneSet Translator.
 
 Run tests with:
     pytest
-    pytest --cov=src/biograph_explorer
+    pytest --cov=src/geneset_translator
 
 Phase 2 Status: Test stubs created
 """

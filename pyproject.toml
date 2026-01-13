@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "biograph_explorer"
+name = "geneset_translator"
 version = "0.1.0"
-description = "Streamlit application for multi-gene TRAPI query integration with NetworkX clustering and LLM-assisted exploration using Cytoscape.js visualization"
+description = "Explore biomedical knowledge graphs for your gene sets via NCATS Translator"
 authors = ["Natalie Gill"]
 license = "MIT"
 readme = "README.md"

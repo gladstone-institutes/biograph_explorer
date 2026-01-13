@@ -845,7 +845,7 @@ class LLMSummarizer:
             logger.error(f"Prompt file not found: {self.prompt_path}")
             raise FileNotFoundError(
                 f"Category summary prompt file not found at {self.prompt_path}. "
-                f"Expected location: src/biograph_explorer/config/prompts/category_summary.txt"
+                f"Expected location: src/geneset_translator/config/prompts/category_summary.txt"
             )
 
     def _flatten_to_strings(self, data: Any) -> List[str]:

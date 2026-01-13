@@ -7,7 +7,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from biograph_explorer.utils.biolink_predicates import (
+from geneset_translator.utils.biolink_predicates import (
     GRANULARITY_PRESETS,
     filter_predicates_by_granularity,
 )
@@ -89,7 +89,7 @@ class TestTRAPIClient:
         """Create a mock TRAPIClient for testing."""
         # Import here to avoid issues if TCT is not installed
         try:
-            from biograph_explorer.core.trapi_client import TRAPIClient
+            from geneset_translator.core.trapi_client import TRAPIClient
 
             with patch.object(TRAPIClient, "_load_translator_resources"):
                 client = TRAPIClient(cache_dir=Path("/tmp/test_cache"))
@@ -107,7 +107,7 @@ class TestTRAPIClient:
 
     def test_cache_response(self, mock_client, tmp_path):
         """Test caching of query responses."""
-        from biograph_explorer.core.trapi_client import TRAPIResponse
+        from geneset_translator.core.trapi_client import TRAPIResponse
 
         mock_client.cache_dir = tmp_path
 
