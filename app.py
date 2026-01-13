@@ -1821,13 +1821,14 @@ if st.session_state.graph:
             name_search_hash = hash(st.session_state.name_search_filter) if st.session_state.name_search_filter else 0
 
             # Only include graph structure and layout parameters in key
-            # Styling parameters (base_node_size, edge_width, collapse_counter) excluded to preserve positions
+            # Styling parameters (base_node_size, edge_width) excluded to preserve positions
             # Note: use_metric_sizing IS included because it changes node element data (_size_factor)
+            # Note: collapse_counter IS included so the Collapse button triggers re-render
             cytoscape_key = (
                 f"biograph_network_{layout}_{filter_hash}_{category_filter}_{pub_filter_hash}_"
                 f"{max_intermediates}_{sizing_metric}_{use_metric_sizing}_"
-                f"{st.session_state.gene_group_filter}_{name_search_hash}"
-                # Note: base_node_size, edge_width, collapse_counter excluded to preserve positions
+                f"{st.session_state.gene_group_filter}_{name_search_hash}_"
+                f"{st.session_state.collapse_counter}"
             )
 
             # Compute priority predicate for edge collapsing
