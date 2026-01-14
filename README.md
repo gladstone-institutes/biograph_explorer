@@ -8,7 +8,6 @@ Explore biomedical knowledge graphs for gene sets via NCATS Translator.
 
 - Query NCATS Translator APIs to explore gene neighborhoods and disease connections
 - Interactive network visualization with Cytoscape.js
-- Community detection and centrality analysis
 - Human Protein Atlas integration for gene/protein cell type and tissue expression filtering
 - LLM-assisted summaries with citations (optional, requires API key)
 - Support for custom gene lists or built-in example datasets
