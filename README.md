@@ -56,6 +56,9 @@ If you have [Docker](https://www.docker.com/) installed, you can run the app in 
 ./docker_run.sh
 ```
 
+### Video Tutorial Coming soon! 
+
+
 This pulls a pre-built image and runs the app. The script mounts your local `.env` (if present, for LLM summaries) and `data/` folder (for query caching).
 
 ### Quick Start
