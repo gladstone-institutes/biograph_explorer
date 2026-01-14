@@ -626,6 +626,7 @@ if not run_query and not st.session_state.graph:
         - **Normalize genes** using TCT name resolver
         - **Query TRAPI** APIs for knowledge graph edges
         - **Build graph** with NetworkX
+        - **Annotate** gene/protein nodes with Human Protein Atlas expression data
         - **Visualize** with interactive Cytoscape.js graphs
         """)
 

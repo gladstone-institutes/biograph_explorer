@@ -1,0 +1,581 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 900 520"
+   width="900"
+   height="520"
+   version="1.1"
+   id="svg33"
+   role="img"
+   aria-labelledby="flowchart-title flowchart-desc"
+   sodipodi:docname="user_flowchart.svg"
+   inkscape:version="1.3.2 (091e20e, 2023-11-25)"
+   inkscape:export-filename="user_flowchart.png"
+   inkscape:export-xdpi="360"
+   inkscape:export-ydpi="360"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <title
+     id="flowchart-title">GeneSet Translator User Workflow</title>
+  <desc
+     id="flowchart-desc">A four-phase workflow showing how users interact with GeneSet Translator: 1) Input genes and select disease, 2) Configure intermediate entity types and filters, 3) Run query to build graph, 4) Explore results via Network, Overview, and Summary tabs. Below shows the Pathfinder query pattern connecting Genes to Disease through intermediate entities.</desc>
+  <sodipodi:namedview
+     id="namedview33"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="1.0596885"
+     inkscape:cx="477.02698"
+     inkscape:cy="217.04491"
+     inkscape:window-width="1728"
+     inkscape:window-height="961"
+     inkscape:window-x="0"
+     inkscape:window-y="38"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer-query-format" />
+  <!--
+    Wong B Colorblind-Safe Palette:
+    - Orange: #E69F00
+    - Sky Blue: #56B4E9
+    - Bluish Green: #009E73
+    - Yellow: #F0E442
+    - Blue: #0072B2
+    - Vermillion: #D55E00
+    - Reddish Purple: #CC79A7
+    - Black: #000000
+  -->
+  <defs
+     id="defs1">
+    <marker
+       id="arrow"
+       markerWidth="10"
+       markerHeight="7"
+       refX="9"
+       refY="3.5"
+       orient="auto">
+      <polygon
+         points="0 0, 10 3.5, 0 7"
+         fill="#000000"
+         id="polygon1" />
+    </marker>
+  </defs>
+  <!-- LAYER: Background -->
+  <g
+     id="layer-background"
+     inkscape:groupmode="layer"
+     inkscape:label="Background"
+     sodipodi:insensitive="true">
+    <rect
+       width="100%"
+       height="100%"
+       fill="#ffffff"
+       id="rect1"
+       x="0"
+       y="0" />
+  </g>
+  <!-- LAYER: Title -->
+  <g
+     id="layer-title"
+     inkscape:groupmode="layer"
+     inkscape:label="Title" />
+  <!-- LAYER: Connectors -->
+  <g
+     id="layer-connectors"
+     inkscape:groupmode="layer"
+     inkscape:label="Connectors">
+    <!-- Arrow 1→2 -->
+    <!-- Arrow 2→3 -->
+    <!-- Arrow 3→4 -->
+    <!-- Loop back -->
+  </g>
+  <!-- LAYER: Phase 1 - Input (Sky Blue #56B4E9) -->
+  <g
+     id="layer-phase1-input"
+     inkscape:groupmode="layer"
+     inkscape:label="Phase 1 - Input" />
+  <!-- LAYER: Phase 2 - Configure (Bluish Green #009E73) -->
+  <g
+     id="layer-phase2-configure"
+     inkscape:groupmode="layer"
+     inkscape:label="Phase 2 - Configure" />
+  <!-- LAYER: Phase 3 - Query (Orange #E69F00) -->
+  <g
+     id="layer-phase3-query"
+     inkscape:groupmode="layer"
+     inkscape:label="Phase 3 - Query" />
+  <!-- LAYER: Phase 4 - Explore (Reddish Purple #CC79A7) -->
+  <g
+     id="layer-phase4-explore"
+     inkscape:groupmode="layer"
+     inkscape:label="Phase 4 - Explore">
+    <path
+       d="m 792.76,240.57219 v 20.9319 q 0,15.69893 -15.69893,15.69893 H 107.24013 q -15.698923,0 -15.698923,-15.69893 v -20.9319"
+       stroke="#000000"
+       stroke-width="2"
+       fill="none"
+       stroke-dasharray="5, 3"
+       marker-end="url(#arrow)"
+       id="path3" />
+    <rect
+       x="241.55318"
+       y="26.020222"
+       width="188.3871"
+       height="209.319"
+       rx="8.3727598"
+       fill="#009e73"
+       stroke="#000000"
+       stroke-width="2"
+       id="rect9" />
+    <text
+       x="335.92102"
+       y="52.185097"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="14px"
+       font-weight="bold"
+       fill="#ffffff"
+       id="text10"
+       style="stroke-width:1.04659">2. CONFIGURE</text>
+    <g
+       id="g17"
+       transform="translate(-6.977302,6)">
+      <rect
+         x="269.46237"
+         y="73.116997"
+         width="146.5233"
+         height="47.096775"
+         rx="4.1863799"
+         fill="#ffffff"
+         stroke="#000000"
+         stroke-width="1"
+         id="rect10" />
+      <text
+         x="342.72403"
+         y="94.048897"
+         text-anchor="middle"
+         font-family="Arial, sans-serif"
+         font-size="12px"
+         fill="#000000"
+         id="text11"
+         style="stroke-width:1.04659">Choose Intermediate</text>
+      <text
+         x="342.72403"
+         y="109.74782"
+         text-anchor="middle"
+         font-family="Arial, sans-serif"
+         font-size="12px"
+         fill="#000000"
+         id="text12"
+         style="stroke-width:1.04659">Entity Types</text>
+    </g>
+    <g
+       id="g16"
+       transform="translate(-6.977302,6)">
+      <rect
+         x="269.46237"
+         y="146.37865"
+         width="146.5233"
+         height="36.630825"
+         rx="4.1863799"
+         fill="#ffffff"
+         stroke="#000000"
+         stroke-width="1"
+         id="rect13" />
+      <text
+         x="342.72403"
+         y="168.98898"
+         text-anchor="middle"
+         font-family="Arial, sans-serif"
+         font-size="12px"
+         fill="#000000"
+         id="text14"
+         style="stroke-width:1.04659">Set Filters</text>
+    </g>
+    <rect
+       x="698.56635"
+       y="26.020222"
+       width="188.3871"
+       height="209.319"
+       rx="8.3727598"
+       fill="#cc79a7"
+       stroke="#000000"
+       stroke-width="2"
+       id="rect22" />
+    <text
+       x="792.97864"
+       y="52.185097"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="14px"
+       font-weight="bold"
+       fill="#000000"
+       id="text23"
+       style="stroke-width:1.04659">4. EXPLORE</text>
+    <g
+       id="g22"
+       transform="matrix(1.0714408,0,0,1.0714408,-56.635385,-5.1878139)">
+      <rect
+         x="719.49823"
+         y="73.116997"
+         width="146.5233"
+         height="31.39785"
+         rx="4.1863799"
+         fill="#ffffff"
+         stroke="#000000"
+         stroke-width="1"
+         id="rect23" />
+      <text
+         x="792.76001"
+         y="93.040527"
+         text-anchor="middle"
+         font-family="Arial, sans-serif"
+         font-size="12px"
+         fill="#000000"
+         id="text24"
+         style="stroke-width:1.04659">Network</text>
+    </g>
+    <g
+       id="g23"
+       transform="matrix(1.0714408,0,0,1.0714408,-56.635385,-5.1878139)">
+      <rect
+         x="719.49823"
+         y="114.98079"
+         width="146.5233"
+         height="31.39785"
+         rx="4.1863799"
+         fill="#ffffff"
+         stroke="#000000"
+         stroke-width="1"
+         id="rect24" />
+      <text
+         x="792.76001"
+         y="134.97757"
+         text-anchor="middle"
+         font-family="Arial, sans-serif"
+         font-size="12px"
+         fill="#000000"
+         id="text25"
+         style="stroke-width:1.04659">Overview</text>
+    </g>
+    <g
+       id="g24"
+       transform="matrix(1.0714408,0,0,1.0714408,-56.635385,-5.1878139)">
+      <rect
+         x="719.49823"
+         y="156.84459"
+         width="146.5233"
+         height="31.39785"
+         rx="4.1863799"
+         fill="#ffffff"
+         stroke="#000000"
+         stroke-width="1"
+         id="rect25" />
+      <text
+         x="792.76001"
+         y="175.64899"
+         text-anchor="middle"
+         font-family="Arial, sans-serif"
+         font-size="12px"
+         fill="#000000"
+         id="text26"
+         style="stroke-width:1.04659">AI Summary</text>
+    </g>
+    <rect
+       x="13.046582"
+       y="26.020222"
+       width="188.3871"
+       height="209.319"
+       rx="8.3727598"
+       fill="#56b4e9"
+       stroke="#0072b2"
+       stroke-width="2"
+       id="rect3"
+       style="stroke:#000000;stroke-opacity:1" />
+    <text
+       x="106.82998"
+       y="52.185097"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="14px"
+       font-weight="bold"
+       fill="#000000"
+       id="text4"
+       style="stroke-width:1.04659">1. INPUT</text>
+    <g
+       id="g36"
+       transform="translate(0,-0.15053368)">
+      <g
+         id="g3"
+         transform="translate(9.5367432e-7,8)">
+        <rect
+           x="33.978481"
+           y="135.91269"
+           width="146.5233"
+           height="36.630825"
+           rx="4.1863799"
+           fill="#ffffff"
+           stroke="#0072b2"
+           stroke-width="1"
+           id="rect6" />
+        <text
+           x="107.21962"
+           y="158.52303"
+           text-anchor="middle"
+           font-family="Arial, sans-serif"
+           font-size="12px"
+           fill="#000000"
+           id="text7"
+           style="stroke-width:1.04659">Select Disease</text>
+      </g>
+      <g
+         id="g2"
+         transform="translate(9.5367432e-7,8)">
+        <rect
+           x="33.978481"
+           y="73.116997"
+           width="146.5233"
+           height="36.630825"
+           rx="4.1863799"
+           fill="#ffffff"
+           stroke="#0072b2"
+           stroke-width="1"
+           id="rect4" />
+        <text
+           x="106.99696"
+           y="89.607491"
+           text-anchor="middle"
+           font-family="Arial, sans-serif"
+           font-size="12px"
+           fill="#000000"
+           id="text5"
+           style="stroke-width:1.04659">Enter Genes</text>
+        <text
+           x="107.30434"
+           y="103.34346"
+           text-anchor="middle"
+           font-family="Arial, sans-serif"
+           font-size="11px"
+           fill="#000000"
+           id="text9"
+           style="stroke-width:1.04659">(CSV / Manual)</text>
+      </g>
+    </g>
+    <rect
+       x="470.05975"
+       y="26.020222"
+       width="188.3871"
+       height="209.319"
+       rx="8.3727598"
+       fill="#e69f00"
+       stroke="#000000"
+       stroke-width="2"
+       id="rect16" />
+    <text
+       x="563.98328"
+       y="52.185097"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="14px"
+       font-weight="bold"
+       fill="#000000"
+       id="text17"
+       style="stroke-width:1.04659">3. QUERY</text>
+    <g
+       id="g19"
+       transform="translate(-13.954571)">
+      <rect
+         x="504.94623"
+         y="78.349968"
+         width="146.5233"
+         height="41.8638"
+         rx="4.1863799"
+         fill="#0072b2"
+         id="rect17"
+         style="fill:#0072b2;fill-opacity:1;stroke-width:1.04659" />
+      <text
+         x="578.20789"
+         y="104.51485"
+         text-anchor="middle"
+         font-family="Arial, sans-serif"
+         font-size="12px"
+         fill="#ffffff"
+         font-weight="bold"
+         id="text18"
+         style="stroke-width:1.04659">Run Query</text>
+    </g>
+    <g
+       id="g21"
+       transform="translate(-13.954571)">
+      <rect
+         x="504.94623"
+         y="151.61162"
+         width="146.5233"
+         height="68.028671"
+         rx="4.1863799"
+         fill="#ffffff"
+         stroke="#000000"
+         stroke-width="1"
+         id="rect19" />
+      <g
+         id="g20"
+         transform="translate(5.5877321,4.0301214)">
+        <text
+           x="572.87048"
+           y="168.2312"
+           text-anchor="middle"
+           font-family="Arial, sans-serif"
+           font-size="12.5046px"
+           fill="#000000"
+           id="text20"
+           style="stroke-width:1.18975">Query APIs</text>
+        <text
+           x="572.87048"
+           y="186.07747"
+           text-anchor="middle"
+           font-family="Arial, sans-serif"
+           font-size="12.5046px"
+           fill="#000000"
+           id="text21"
+           style="stroke-width:1.18975">Build Graph</text>
+        <text
+           x="572.87048"
+           y="203.92372"
+           text-anchor="middle"
+           font-family="Arial, sans-serif"
+           font-size="12.5046px"
+           fill="#000000"
+           id="text22"
+           style="stroke-width:1.18975">Annotate Nodes</text>
+      </g>
+    </g>
+    <text
+       x="393.29288"
+       y="202.48898"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="17.2161px"
+       fill="#666666"
+       id="text6"
+       style="fill:#000000;fill-opacity:1;stroke-width:1.50152"
+       transform="scale(1.4346745,0.69702221)">▼</text>
+  </g>
+  <!-- LAYER: Query Format -->
+  <g
+     id="layer-query-format"
+     inkscape:groupmode="layer"
+     inkscape:label="Query Format">
+    <!-- Query pattern diagram - centered -->
+    <rect
+       x="20.495766"
+       y="322.27872"
+       width="859.00842"
+       height="157.64308"
+       rx="6.1725163"
+       fill="#f8f9fa"
+       stroke="#000000"
+       stroke-width="1.07561"
+       id="rect27" />
+    <text
+       x="449.94885"
+       y="352.02548"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="19.0318px"
+       font-weight="bold"
+       fill="#000000"
+       id="text28"
+       style="stroke-width:1.39872">Pathfinder Query Pattern</text>
+    <rect
+       x="156.13881"
+       y="392.44211"
+       width="130.60497"
+       height="52.241989"
+       rx="7.836298"
+       fill="#D55E00"
+       stroke="#000000"
+       stroke-width="2"
+       id="rect28" />
+    <text
+       x="221.47244"
+       y="424.68362"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="15.947px"
+       font-weight="bold"
+       fill="#ffffff"
+       id="text29"
+       style="stroke-width:1.48768">Gene(s)</text>
+    <line
+       x1="293.27402"
+       y1="418.56311"
+       x2="358.57651"
+       y2="418.56311"
+       stroke="#000000"
+       stroke-width="2"
+       marker-end="url(#arrow)"
+       id="line29" />
+    <rect
+       x="365.10675"
+       y="372.85138"
+       width="169.78647"
+       height="91.423477"
+       rx="7.836298"
+       fill="#009e73"
+       stroke="#000000"
+       stroke-width="2"
+       id="rect29" />
+    <text
+       x="449.59167"
+       y="411.83255"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="18.3789px"
+       fill="#ffffff"
+       id="text30"
+       style="stroke-width:2.00031"><tspan
+         sodipodi:role="line"
+         id="tspan35"
+         x="449.59167"
+         y="411.83255"
+         style="stroke-width:2.00031">Protein | Drug</tspan><tspan
+         sodipodi:role="line"
+         id="tspan36"
+         x="449.59167"
+         y="434.80618"
+         style="stroke-width:2.00031">Gene | Pathway</tspan></text>
+    <line
+       x1="541.42346"
+       y1="418.56311"
+       x2="606.72595"
+       y2="418.56311"
+       stroke="#000000"
+       stroke-width="2"
+       marker-end="url(#arrow)"
+       id="line32" />
+    <rect
+       x="613.25623"
+       y="392.44211"
+       width="130.60497"
+       height="52.241989"
+       rx="7.836298"
+       fill="#F0E442"
+       stroke="#000000"
+       stroke-width="2"
+       id="rect32" />
+    <text
+       x="678.26575"
+       y="424.93991"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="18.1133px"
+       font-weight="bold"
+       fill="#000000"
+       id="text33"
+       style="stroke-width:1.68978">Disease</text>
+  </g>
+</svg>

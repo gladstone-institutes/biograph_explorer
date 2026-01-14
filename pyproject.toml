@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "geneset_translator"
-version = "0.1.0"
+version = "1.0.0"
 description = "Explore biomedical knowledge graphs for your gene sets via NCATS Translator"
 authors = ["Natalie Gill"]
 license = "MIT"

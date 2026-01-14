@@ -2,6 +2,6 @@
 
 
 
-## v0.1.0 (03/10/2025)
+## v1.0.0 (13/01/2026)
 
 - First release of `geneset_translator`!
