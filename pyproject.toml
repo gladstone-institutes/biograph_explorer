@@ -7,7 +7,7 @@ license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.11,<4.0"
 dependencies = [
-    "tct>=0.1.6,<0.2.0",
+    "TCT",
     "streamlit>=1.50.0,<2.0.0",
     "pydantic>=2.11.9,<3.0.0",
     "networkx>=3.5,<4.0",
@@ -18,11 +18,14 @@ dependencies = [
     "pyyaml>=6.0.3,<7.0.0",
     "treelib>=1.8.0,<2.0.0",
     "altair>=6.0.0,<7.0.0",
-    # LLM summarization (optional at runtime)
-    "anthropic>=0.105,<0.106",
+    # LLM summarization + agent (optional at runtime)
+    "anthropic>=0.107,<1.0",
     "python-dotenv>=1.0.0,<2.0.0",
     "requests>=2.32.0,<3.0.0",
 ]
+
+[tool.uv.sources]
+TCT = { git = "https://github.com/natalie-23-gill/Translator_component_toolkit.git", rev = "f702893" }
 
 [dependency-groups]
 dev = [
@@ -33,6 +36,10 @@ dev = [
     "watchdog>=6.0.0,<7.0.0",
     "notebook>=7.5.0,<8.0.0",
 ]
+
+[tool.pytest.ini_options]
+# Put the repo root on sys.path so the top-level `evals` package imports in tests.
+pythonpath = ["."]
 
 [build-system]
 requires = ["hatchling"]

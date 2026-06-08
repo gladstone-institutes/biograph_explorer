@@ -29,11 +29,35 @@ FALLBACK_MODELS: List[Dict[str, str]] = [
 MODEL_PRICING: Dict[str, Tuple[float, float]] = {
     "haiku": (1.00, 5.00),
     "sonnet": (3.00, 15.00),
-    "opus": (15.00, 75.00),
+    "opus": (5.00, 25.00),
 }
 
 # Fallback pricing (Haiku-class) for an unknown model id; never raise on costing.
 DEFAULT_PRICING: Tuple[float, float] = (1.00, 5.00)
+
+
+def _apply_pricing_overrides() -> None:
+    """Merge per-tier price overrides from the GENESET_MODEL_PRICING env var.
+
+    The Anthropic API does not return pricing, so prices live in MODEL_PRICING above.
+    To avoid editing code when prices change, set e.g.
+    ``GENESET_MODEL_PRICING='{"opus": [5, 25], "sonnet": [3, 15]}'`` in the environment/.env.
+    """
+    import json
+    import os
+
+    raw = os.environ.get("GENESET_MODEL_PRICING")
+    if not raw:
+        return
+    try:
+        overrides = json.loads(raw)
+        for key, pair in overrides.items():
+            MODEL_PRICING[key.lower()] = (float(pair[0]), float(pair[1]))
+    except Exception as e:  # noqa: BLE001 - bad override must never break costing
+        logger.warning(f"Ignoring invalid GENESET_MODEL_PRICING ({e})")
+
+
+_apply_pricing_overrides()
 
 
 def get_model_pricing(model_id: str) -> Tuple[float, float]:

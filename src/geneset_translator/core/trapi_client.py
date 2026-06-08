@@ -123,7 +123,8 @@ class APITiming:
     success: bool
     edge_count: int
     error: Optional[str] = None
-    error_type: Optional[str] = None  # "client_timeout", "server_timeout", "server_error", "http_error", "exception"
+    error_type: Optional[str] = None  # "client_timeout", "server_timeout", "server_error", "http_error", "exception", "no_edges"
+    returned_ok: bool = False  # HTTP 200 received (even if 0 edges) -- distinguishes "no data" from "failed"
 
 
 class TRAPIResponse(BaseModel):
@@ -281,17 +282,28 @@ class TRAPIClient:
         filtered_apis = []
         filtered_out = {}
 
-        # Known single-edge-only APIs (don't support multi-hop queries)
-        single_edge_apis = {
-            "Service Provider TRAPI",  # "smartAPI/team-specific endpoints only support single-edge queries"
-        }
+        # Known single-edge-only KP families: their Plover/RTX backends reject 2-edge query
+        # graphs by design ("Can only answer single-edge queries"), so they 400 every multi-hop
+        # query. Matched as case-insensitive substrings so version-suffix churn (e.g.
+        # "- TRAPI 1.5.0") does not silently disable the filter. See EOE_HTTP_ERRORS.md (Cause 1).
+        single_edge_api_markers = (
+            "Service Provider TRAPI",
+            "RTX KG2",
+            "Microbiome KP",
+            "CATRAX Pharmacogenomics",
+            "CATRAX BigGIM DrugResponse",
+        )
+
+        def _is_single_edge_only(name: str) -> bool:
+            low = name.lower()
+            return any(marker.lower() in low for marker in single_edge_api_markers)
 
         # Broader categories to exclude when specific ones are requested
         broad_categories = {"biolink:NamedThing", "biolink:Entity", "biolink:ThingWithTaxon"}
 
         for api in selected_apis:
             # Check for single-edge-only APIs in multi-hop queries
-            if is_multihop and api in single_edge_apis:
+            if is_multihop and _is_single_edge_only(api):
                 filtered_out[api] = "Single-edge queries only (no multi-hop support)"
                 continue
 
@@ -436,12 +448,14 @@ class TRAPIClient:
         error_type = None
         result = None
         edge_count = 0
+        returned_ok = False
 
         try:
             response = requests.post(api_url, json=query_json_cur, timeout=self.timeout)
             duration = time.time() - start_time
 
             if response.status_code == 200:
+                returned_ok = True
                 response_json = response.json()
                 data = response_json.get("message", {})
                 kg = data.get("knowledge_graph", {})
@@ -462,15 +476,21 @@ class TRAPIClient:
                     result = data
                     logger.info(f"API '{api_name}' completed in {duration:.2f}s ({edge_count} edges)")
                 elif "knowledge_graph" in data:
-                    # API returned but with no edges (matches TCT behavior)
+                    # API answered (HTTP 200) but with a valid, empty knowledge graph: this is
+                    # "no matching data", NOT a failure. Tag it so the UI shows "No data".
+                    if not error_msg:
+                        error_type = "no_edges"
                     logger.info(f"API '{api_name}' completed in {duration:.2f}s (0 edges)")
                 else:
                     if not error_msg:  # Only log if we haven't already logged a server error
                         logger.info(f"API '{api_name}' completed in {duration:.2f}s (no KG)")
             else:
-                error_msg = f"HTTP {response.status_code}"
+                # Capture the response body (truncated): it carries the actionable reason,
+                # e.g. "Can only answer single-edge queries" or a stale-endpoint 404 message.
+                body = " ".join((response.text or "").split())[:300]
+                error_msg = f"HTTP {response.status_code}: {body}" if body else f"HTTP {response.status_code}"
                 error_type = "http_error"
-                logger.info(f"API '{api_name}' failed in {duration:.2f}s ({error_msg})")
+                logger.info(f"API '{api_name}' failed in {duration:.2f}s (HTTP {response.status_code})")
 
         except requests.Timeout:
             duration = time.time() - start_time
@@ -490,6 +510,7 @@ class TRAPIClient:
             edge_count=edge_count,
             error=error_msg,
             error_type=error_type,
+            returned_ok=returned_ok,
         )
 
         return result, timing
