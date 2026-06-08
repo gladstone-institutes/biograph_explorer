@@ -22,7 +22,7 @@ Explore biomedical knowledge graphs for gene sets via NCATS Translator.
 
 ### Prerequisites
 - Python 3.11+
-- [Poetry](https://python-poetry.org/docs/#installation)
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
 
 ### Setup
 
@@ -30,7 +30,7 @@ Explore biomedical knowledge graphs for gene sets via NCATS Translator.
    ```bash
    git clone https://github.com/gladstone-institutes/GeneSet_Translator.git
    cd GeneSet_Translator
-   poetry install
+   uv sync
    ```
 
 2. (Optional) Enable LLM summaries:
@@ -45,12 +45,12 @@ If you have trouble installing the app dependencies, consider using Docker (inst
 
 Run the app:
 ```bash
-poetry run streamlit run app.py
+uv run streamlit run app.py
 ```
 
 ### Docker
 
-If you have [Docker](https://www.docker.com/) installed, you can run the app in a container without installing Python or Poetry:
+If you have [Docker](https://www.docker.com/) installed, you can run the app in a container without installing Python or uv:
 
 ```bash
 ./docker_run.sh

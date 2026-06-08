@@ -44,28 +44,21 @@ Ready to contribute? Here's how to set up `geneset_translator` for local develop
 
 1. Download a copy of `geneset_translator` locally.
 
-2. Create and activate a conda environment for `geneset_translator`:
+2. Install `geneset_translator` using `uv` (this creates and manages the virtual environment for you):
 
     ```console
-    $ conda create -n geneset_translator python=3.10
-    $ conda activate geneset_translator
+    $ uv sync
     ```
 
-3. Install `geneset_translator` using `poetry`:
-
-    ```console
-    $ poetry install
-    ```
-
-4. Use `git` (or similar) to create a branch for local development and make your changes:
+3. Use `git` (or similar) to create a branch for local development and make your changes:
 
     ```console
     $ git checkout -b name-of-your-bugfix-or-feature
     ```
 
-5. When you're done making changes, check that your changes conform to any code formatting requirements and pass any tests.
+4. When you're done making changes, check that your changes conform to any code formatting requirements and pass any tests.
 
-6. Commit your changes and open a pull request.
+5. Commit your changes and open a pull request.
 
 ## Pull Request Guidelines
 

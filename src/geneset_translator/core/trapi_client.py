@@ -1046,7 +1046,22 @@ class TRAPIClient:
             if filtered:
                 filtered_edges.append(edge)
 
-        edges = filtered_edges
+        # Guard: never let predicate filtering turn a non-empty result into an empty
+        # graph. If the filter removed every edge, fall back to the unfiltered set and
+        # surface a notice so the user understands why filtering was bypassed.
+        if edges_before_filter > 0 and len(filtered_edges) == 0:
+            msg = (
+                f"Predicate filter would have removed all {edges_before_filter} edges; "
+                "showing unfiltered results instead. Loosen the granularity preset to refine."
+            )
+            logger.warning(msg)
+            if progress_callback:
+                progress_callback(msg)
+            self._granularity_filter_bypassed = True
+        else:
+            edges = filtered_edges
+            self._granularity_filter_bypassed = False
+
         edges_removed = edges_before_filter - len(edges)
         logger.info(f"Post-filtered edges: {len(edges)} (removed {edges_removed} by predicate filter)")
 
@@ -1145,6 +1160,7 @@ class TRAPIClient:
                 "exclude_homology": exclude_homology,
                 "edges_before_filter": edges_before_filter,
                 "edges_removed": edges_removed,
+                "granularity_filter_bypassed": getattr(self, "_granularity_filter_bypassed", False),
                 "api_timings": [asdict(t) for t in api_timings],
                 "total_query_duration": round(query_duration, 3),
                 "query_json": query_json,  # TRAPI query structure for download

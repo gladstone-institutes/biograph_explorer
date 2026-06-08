@@ -9,9 +9,9 @@ Handles:
 
 """
 
-from typing import List, Dict, Any, Optional, Set, Union
+from typing import List, Dict, Any, Optional, Set, Tuple, Union
 import networkx as nx
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 import logging
 
 try:
@@ -33,8 +33,7 @@ class KnowledgeGraph(BaseModel):
     node_categories: Dict[str, int] = Field(default_factory=dict, description="Node category counts")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Graph metadata")
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class GraphBuilder:
@@ -148,6 +147,9 @@ class GraphBuilder:
                 # Extract confidence scores from all patterns
                 confidence_scores = self._extract_confidence_scores_robust(attributes)
 
+                # Extract provenance (knowledge_level, agent_type) - on virtually all modern edges
+                knowledge_level, agent_type = self._extract_provenance(attributes)
+
                 # Use predicate + index to guarantee unique edge keys in MultiDiGraph
                 # This preserves semantic grouping while preventing any collisions
                 # (even if two edges have identical subject, object, predicate from different sources)
@@ -163,6 +165,8 @@ class GraphBuilder:
                     publications=publications,  # Extracted publications
                     sentences=sentences,  # Supporting sentences
                     confidence_scores=confidence_scores,  # Confidence scores
+                    knowledge_level=knowledge_level,  # Provenance: assertion/prediction/etc.
+                    agent_type=agent_type,  # Provenance: manual/automated/text-mining
                     qualifiers=edge_attrs.get('qualifiers', []),
                     query_result_id=edge_attrs.get('query_result_id'),
                     # Keep legacy knowledge_source for backward compatibility
@@ -482,4 +486,40 @@ class GraphBuilder:
                             except (ValueError, TypeError):
                                 pass
 
+            # Pattern 5: adjusted p-value (modern statistical-association KPs)
+            if attr_type == 'biolink:adjusted_p_value' and value is not None:
+                try:
+                    scores['adjusted_p_value'] = float(value)
+                except (ValueError, TypeError):
+                    pass
+
         return scores
+
+    def _extract_provenance(self, attributes: List[Dict[str, Any]]) -> Tuple[Optional[str], Optional[str]]:
+        """Extract edge provenance: knowledge_level and agent_type.
+
+        These TRAPI provenance attributes appear on virtually all modern edges and
+        are the most useful signal for end users: knowledge_level distinguishes a
+        curated assertion from a prediction or statistical association, and agent_type
+        distinguishes manual vs automated vs text-mining sources.
+
+        Args:
+            attributes: List of TRAPI attribute dictionaries
+
+        Returns:
+            Tuple of (knowledge_level, agent_type); each is a cleaned string or None.
+        """
+        knowledge_level = None
+        agent_type = None
+
+        for attr in attributes:
+            attr_type = attr.get('attribute_type_id', '')
+            value = attr.get('value')
+            if value is None:
+                continue
+            if attr_type == 'biolink:knowledge_level':
+                knowledge_level = str(value).replace('_', ' ')
+            elif attr_type == 'biolink:agent_type':
+                agent_type = str(value).replace('_', ' ')
+
+        return knowledge_level, agent_type

@@ -5,3 +5,8 @@
 __pycache__
 .pytest_cache
 data/cache/
+# uv / build artifacts (don't copy the host venv or build output into the image)
+.venv
+dist/
+build/
+*.egg-info

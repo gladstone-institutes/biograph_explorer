@@ -191,6 +191,7 @@ def prepare_cytoscape_elements(
     query_genes: List[str],
     sizing_metric: str = "gene_frequency",
     use_metric_sizing: bool = True,
+    node_summaries: Optional[Dict[str, str]] = None,
 ) -> Dict[str, List[Dict]]:
     """Convert NetworkX graph to Cytoscape.js elements format.
 
@@ -285,6 +286,12 @@ def prepare_cytoscape_elements(
         original_symbol = node_attrs.get("original_symbol", "")
         display_label = node_attrs.get("label", node_id)
         node_element["data"]["name"] = original_symbol if original_symbol else display_label
+
+        # Inject a previously generated AI summary so it renders in the infopanel.
+        # Keyed by node CURIE; survives filter/layout/styling reruns since elements
+        # are rebuilt each run from the (persisted) node_summaries dict.
+        if node_summaries and node_id in node_summaries:
+            node_element["data"]["AI Summary"] = node_summaries[node_id]
 
         # Add query gene flag (internal - for styling)
         is_query_gene = node_attrs.get("is_query_gene", False)
@@ -488,6 +495,16 @@ def prepare_cytoscape_elements(
                 # Not a dict or empty - remove if exists
                 if "confidence_scores" in edge_element["data"]:
                     del edge_element["data"]["confidence_scores"]
+
+            # Add provenance (knowledge_level, agent_type) - user-facing.
+            # These are the most useful trust signals: assertion vs prediction,
+            # and manual vs automated vs text-mining source.
+            knowledge_level = edge_attrs.get("knowledge_level")
+            if knowledge_level:
+                edge_element["data"]["knowledge_level"] = knowledge_level
+            agent_type = edge_attrs.get("agent_type")
+            if agent_type:
+                edge_element["data"]["agent_type"] = agent_type
 
             # Add qualifiers (formatted as readable text)
             qualifiers = edge_attrs.get("qualifiers", [])
@@ -876,6 +893,7 @@ def render_network_visualization(
     base_node_size: int = 30,
     use_metric_sizing: bool = True,
     edge_width: int = 2,
+    node_summaries: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """Prepare network visualization data for streamlit-cytoscape component.
 
@@ -918,7 +936,8 @@ def render_network_visualization(
 
         # Prepare Cytoscape elements
         elements = prepare_cytoscape_elements(
-            graph, query_genes, sizing_metric, use_metric_sizing
+            graph, query_genes, sizing_metric, use_metric_sizing,
+            node_summaries=node_summaries
         )
 
         # Create node and edge styles

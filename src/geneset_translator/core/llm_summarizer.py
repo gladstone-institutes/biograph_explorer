@@ -18,6 +18,7 @@ import networkx as nx
 from pydantic import BaseModel, Field
 
 from ..utils.biolink_predicates import get_predicate_info
+from ..utils.model_utils import DEFAULT_MODEL_ID, get_model_pricing
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,7 @@ class StagedCategoryQuery(BaseModel):
     nodes_sampled: int = Field(description="Nodes included after sampling")
     edges_sampled: int = Field(description="Edges in sampled subgraph")
     is_cached: bool = Field(default=False, description="Whether cached result exists")
+    model: str = Field(default=DEFAULT_MODEL_ID, description="Claude model used for this query")
 
     @property
     def total_input_tokens(self) -> int:
@@ -73,12 +75,10 @@ class StagedCategoryQuery(BaseModel):
 
     @property
     def estimated_cost(self) -> float:
-        """Calculate estimated cost using Haiku 4.5 pricing.
-
-        Pricing: $1.00/M input tokens, $5.00/M output tokens
-        """
-        input_cost = (self.input_tokens / 1_000_000) * 1.00
-        output_cost = (self.output_tokens_estimate / 1_000_000) * 5.00
+        """Calculate estimated cost using the selected model's pricing."""
+        in_price, out_price = get_model_pricing(self.model)
+        input_cost = (self.input_tokens / 1_000_000) * in_price
+        output_cost = (self.output_tokens_estimate / 1_000_000) * out_price
         return input_cost + output_cost
 
 
@@ -116,7 +116,7 @@ class LLMSummarizer:
             self.client = Anthropic()
             logger.info(f"Anthropic client initialized successfully")
         except ImportError:
-            raise ImportError("anthropic package required. Install with: poetry add anthropic")
+            raise ImportError("anthropic package required. Install with: uv add anthropic")
 
         self.model = model
         self.prompt_path = prompt_path or self.DEFAULT_PROMPT_PATH
@@ -201,8 +201,19 @@ class LLMSummarizer:
         logger.info(f"JSON context for {category}: {token_count} tokens, "
                    f"{len(context['nodes'])} nodes, {len(context['edges'])} edges")
 
-        # Generate with citations
-        summary_text, citations = self._generate_with_citations(context, category, graph)
+        # Generate with citations. On failure, return a clean message (the raw
+        # error is logged to the terminal) and do NOT cache, so the failure does
+        # not persist or get re-served on later runs.
+        try:
+            summary_text, citations = self._generate_with_citations(context, category, graph)
+        except Exception as e:
+            logger.error(f"Summary generation failed for {category}: {e}")
+            return SummaryData(
+                category=category,
+                summary_text=f"Summary generation failed for {category}. See the app logs for details.",
+                citations=[],
+                metadata={'error': 'generation_failed', 'model': self.model, 'from_cache': False}
+            )
 
         # Create summary data
         summary_data = SummaryData(
@@ -223,10 +234,207 @@ class LLMSummarizer:
             }
         )
 
-        # Cache the result
+        # Cache the result (only successful generations reach here)
         self._save_to_cache(cache_key, category, summary_data)
 
         return summary_data
+
+    def generate_node_summary(
+        self,
+        graph: nx.MultiDiGraph,
+        node_curie: str,
+        disease_curie: Optional[str],
+        query_genes: List[str],
+        infores_metadata: Optional[Dict] = None,
+        max_edges: int = 40
+    ) -> SummaryData:
+        """Summarize a single node: its incident edges, predicates, evidence, and
+        how it relates to the disease.
+
+        Reuses the category summary's context builder and citation pipeline, but
+        centers on one node and its 1-hop neighborhood and uses a node-specific
+        prompt. Returns a SummaryData (same model as category summaries).
+
+        Args:
+            graph: Full knowledge graph (pass the unfiltered graph so relationships
+                hidden by the current UI filter are still considered)
+            node_curie: CURIE of the clicked node
+            disease_curie: Target disease CURIE (may be None for 1-hop queries)
+            query_genes: Input gene CURIEs
+            infores_metadata: Optional knowledge source metadata
+            max_edges: Cap on neighbors to include for high-degree nodes
+        """
+        if node_curie not in graph.nodes():
+            return SummaryData(
+                category=f"Node: {node_curie}",
+                summary_text=f"Node {node_curie} was not found in the current knowledge graph.",
+                citations=[],
+                metadata={'error': 'node_not_found', 'node_curie': node_curie}
+            )
+
+        node_data = graph.nodes[node_curie]
+        node_label = node_data.get('label') or node_data.get('original_symbol') or node_curie
+        node_category = node_data.get('category', 'Unknown')
+
+        # Cache check (per node + disease + model + graph state)
+        cache_key = self._generate_node_cache_key(node_curie, disease_curie, graph, query_genes)
+        cache_name = self._node_cache_name(node_curie)
+        cached = self._load_from_cache(cache_key, cache_name)
+        if cached:
+            logger.info(f"Using cached node summary for {node_curie}")
+            cached.metadata['from_cache'] = True
+            return cached
+
+        # 1-hop neighborhood (both directions)
+        neighbors = set(graph.predecessors(node_curie)) | set(graph.successors(node_curie))
+        edges_total = graph.degree(node_curie)
+
+        if not neighbors:
+            return SummaryData(
+                category=f"Node: {node_label}",
+                summary_text=(
+                    f"{node_label} has no edges in the current graph, so there is "
+                    "nothing to summarize."
+                ),
+                citations=[],
+                metadata={
+                    'node_curie': node_curie, 'node_label': node_label,
+                    'edges_total': 0, 'edges_sampled': 0,
+                    'model': self.model, 'from_cache': False
+                }
+            )
+
+        # Cap neighbors for high-degree nodes, always keeping disease + query genes
+        neighbors = self._sample_node_neighbors(
+            graph, node_curie, neighbors, query_genes, disease_curie, max_edges
+        )
+
+        focus_nodes = {node_curie} | neighbors
+        subgraph = graph.subgraph(focus_nodes).copy()
+
+        # Build JSON context with the same shape as the category path
+        context = self._prepare_json_context(
+            subgraph,
+            [node_curie],
+            query_genes,
+            disease_curie or "",
+            node_category,
+            infores_metadata
+        )
+        disease_label = "the disease"
+        if disease_curie and disease_curie in graph.nodes():
+            disease_label = graph.nodes[disease_curie].get('label', disease_curie)
+        elif disease_curie:
+            disease_label = disease_curie
+        context['focus_node'] = {
+            'curie': node_curie,
+            'label': node_label,
+            'category': node_category,
+            'gene_frequency': node_data.get('gene_frequency', 0)
+        }
+
+        # Generate using the node-specific prompt, reusing the citation pipeline.
+        # On failure, raise so the UI can show a clean message; the raw error is
+        # logged to the terminal and nothing is cached.
+        system_prompt = self._build_node_system_prompt(node_label, node_category, disease_label)
+        try:
+            summary_text, citations = self._generate_with_citations(
+                context, node_category, graph, system_prompt=system_prompt
+            )
+        except Exception as e:
+            logger.error(f"Node summary generation failed for {node_curie}: {e}")
+            raise RuntimeError(f"AI summary generation failed for {node_label}.") from e
+
+        edges_sampled = subgraph.number_of_edges()
+        summary_data = SummaryData(
+            category=f"Node: {node_label}",
+            summary_text=summary_text,
+            citations=citations,
+            metadata={
+                'timestamp': datetime.now().isoformat(),
+                'node_curie': node_curie,
+                'node_label': node_label,
+                'node_category': node_category,
+                'edges_total': edges_total,
+                'edges_sampled': edges_sampled,
+                'model': self.model,
+                'format_version': 'node_v1',
+                'from_cache': False
+            }
+        )
+
+        self._save_to_cache(cache_key, cache_name, summary_data)
+        return summary_data
+
+    def _sample_node_neighbors(
+        self,
+        graph: nx.MultiDiGraph,
+        node_curie: str,
+        neighbors: set,
+        query_genes: List[str],
+        disease_curie: Optional[str],
+        max_edges: int
+    ) -> set:
+        """Cap a node's neighbors to the top ``max_edges`` by edge evidence, always
+        retaining the disease and any directly-connected query genes."""
+        if len(neighbors) <= max_edges:
+            return neighbors
+
+        forced = set(query_genes) & neighbors
+        if disease_curie and disease_curie in neighbors:
+            forced.add(disease_curie)
+
+        def neighbor_score(nbr: str) -> float:
+            best = 0.0
+            for u, v in ((node_curie, nbr), (nbr, node_curie)):
+                if graph.has_edge(u, v):
+                    for data in graph[u][v].values():
+                        pubs = data.get('publication_count') or len(data.get('publications') or [])
+                        imp = data.get('importance_score', 0.0) or 0.0
+                        best = max(best, float(pubs) + float(imp))
+            return best
+
+        ranked = sorted(neighbors - forced, key=neighbor_score, reverse=True)
+        remaining = max(0, max_edges - len(forced))
+        return forced | set(ranked[:remaining])
+
+    def _generate_node_cache_key(
+        self,
+        node_curie: str,
+        disease_curie: Optional[str],
+        graph: nx.MultiDiGraph,
+        query_genes: List[str]
+    ) -> str:
+        """Cache key for a node summary (per node + disease + model + graph state)."""
+        format_version = "node_v1"
+        key_str = (
+            f"node|{node_curie}|{disease_curie}|{','.join(sorted(query_genes))}"
+            f"|{graph.number_of_edges()}|{self.model}|{format_version}"
+        )
+        return hashlib.md5(key_str.encode()).hexdigest()
+
+    def _node_cache_name(self, node_curie: str) -> str:
+        """Filesystem-safe cache name component for a node CURIE."""
+        slug = node_curie.replace(':', '_').replace('/', '_')
+        return f"node_{slug}"
+
+    def _build_node_system_prompt(self, node_label: str, node_category: str, disease_label: str) -> str:
+        """Build the node-summary system prompt from config/prompts/node_summary.txt."""
+        node_prompt_path = self.DEFAULT_PROMPT_PATH.parent / "node_summary.txt"
+        try:
+            with open(node_prompt_path, 'r') as f:
+                template = f.read()
+            return template.format(
+                node_label=node_label,
+                node_category=node_category,
+                disease_label=disease_label
+            )
+        except FileNotFoundError:
+            logger.error(f"Node prompt file not found: {node_prompt_path}")
+            raise FileNotFoundError(
+                f"Node summary prompt file not found at {node_prompt_path}. "
+                f"Expected location: src/geneset_translator/config/prompts/node_summary.txt"
+            )
 
     def _generate_cache_key(
         self,
@@ -241,8 +449,16 @@ class LLMSummarizer:
         key_str = f"{','.join(sorted(query_genes))}|{disease_curie}|{category}|{graph.number_of_edges()}|{self.model}|{format_version}|minfreq{min_gene_frequency}"
         return hashlib.md5(key_str.encode()).hexdigest()
 
+    # Prefixes that mark a cached entry as a stale failure from an older run
+    # (before failures stopped being cached). These are purged on load.
+    _FAILURE_PREFIXES = (
+        "Failed to generate summary",
+        "Summary generation failed",
+        "Summary extraction failed",
+    )
+
     def _load_from_cache(self, cache_key: str, category: str) -> Optional[SummaryData]:
-        """Load summary from cache if available and fresh."""
+        """Load summary from cache if available, fresh, and not a stale failure."""
         summary_file = self.summary_cache_dir / cache_key / f"summary_{category}.json"
 
         if summary_file.exists():
@@ -250,7 +466,21 @@ class LLMSummarizer:
             if cache_age < timedelta(days=30):
                 with open(summary_file, 'r') as f:
                     data = json.load(f)
-                    return SummaryData(**data)
+                # Purge stale failures cached by older versions so they are not
+                # re-served; treat as a cache miss and regenerate.
+                summary_text = data.get('summary_text', '') or ''
+                is_failure = (
+                    data.get('metadata', {}).get('error') == 'generation_failed'
+                    or summary_text.startswith(self._FAILURE_PREFIXES)
+                )
+                if is_failure:
+                    logger.info(f"Discarding stale failed cache entry for {category}")
+                    try:
+                        summary_file.unlink()
+                    except OSError:
+                        pass
+                    return None
+                return SummaryData(**data)
 
         return None
 
@@ -272,6 +502,30 @@ class LLMSummarizer:
             json.dump([c.model_dump() for c in summary_data.citations], f, indent=2)
 
         logger.info(f"Cached summary and citations for {category}")
+
+    def _create_message(self, **kwargs):
+        """Call messages.create, transparently handling models that deprecate
+        ``temperature``.
+
+        Newer Claude models reject the ``temperature`` parameter. We still request
+        a low temperature for models that accept it, but if the API reports it as
+        deprecated we drop it and retry, then remember the result for this instance
+        so later calls skip the parameter (and the failed first attempt).
+        """
+        if getattr(self, "_temperature_unsupported", False):
+            kwargs.pop("temperature", None)
+        try:
+            return self.client.messages.create(**kwargs)
+        except Exception as e:
+            msg = str(e).lower()
+            if "temperature" in kwargs and "temperature" in msg and "deprecated" in msg:
+                logger.info(
+                    f"Model {self.model} deprecates 'temperature'; retrying without it"
+                )
+                self._temperature_unsupported = True
+                kwargs.pop("temperature", None)
+                return self.client.messages.create(**kwargs)
+            raise
 
     def _count_tokens_via_api(self, system_prompt: str, user_content: str) -> int:
         """Count tokens using Anthropic's official token counting API.
@@ -304,8 +558,11 @@ class LLMSummarizer:
     def _estimate_system_prompt_tokens(self, system_prompt: str) -> int:
         """Estimate system prompt tokens for display breakdown.
 
-        Uses the Anthropic API with an empty user message to get
-        an accurate system prompt token count.
+        Counts the prompt text via the token-counting API by sending it as the
+        user message. The API rejects empty user content, so we cannot count an
+        empty turn with the prompt in the `system` slot; counting the same text
+        as user content yields an effectively identical token count, which is
+        accurate enough for the cost-breakdown display.
 
         Args:
             system_prompt: System prompt text
@@ -316,10 +573,9 @@ class LLMSummarizer:
         try:
             response = self.client.messages.count_tokens(
                 model=self.model,
-                system=system_prompt,
                 messages=[{
                     "role": "user",
-                    "content": ""
+                    "content": system_prompt
                 }]
             )
             return response.input_tokens
@@ -379,7 +635,8 @@ class LLMSummarizer:
                 nodes_total=0,
                 nodes_sampled=0,
                 edges_sampled=0,
-                is_cached=is_cached
+                is_cached=is_cached,
+                model=self.model
             )
 
         # Sample nodes by query gene connectivity
@@ -438,7 +695,8 @@ class LLMSummarizer:
             nodes_total=nodes_total,
             nodes_sampled=nodes_count,
             edges_sampled=sampled_subgraph.number_of_edges(),
-            is_cached=is_cached
+            is_cached=is_cached,
+            model=self.model
         )
 
     def stage_all_categories(
@@ -582,6 +840,30 @@ class LLMSummarizer:
         return subgraph
 
 
+    def _compose_qualified_relationship(self, qualifiers: List[Dict[str, Any]]) -> str:
+        """Compose a plain-language qualified relationship from biolink qualifiers.
+
+        e.g. qualified_predicate="causes" + object_direction="increased" +
+        object_aspect="activity" -> "causes increased activity". Returns "" when
+        there are no usable qualifiers.
+        """
+        if not qualifiers:
+            return ""
+        qualified_predicate = direction = aspect = ""
+        for q in qualifiers:
+            if not isinstance(q, dict):
+                continue
+            q_type = q.get("qualifier_type_id", "")
+            q_value = str(q.get("qualifier_value", "")).replace("biolink:", "").replace("_", " ")
+            if q_type == "biolink:qualified_predicate":
+                qualified_predicate = q_value
+            elif q_type == "biolink:object_direction_qualifier":
+                direction = q_value
+            elif q_type == "biolink:object_aspect_qualifier":
+                aspect = q_value
+        parts = [p for p in (qualified_predicate, direction, aspect) if p]
+        return " ".join(parts)
+
     def _prepare_json_context(
         self,
         subgraph: nx.MultiDiGraph,
@@ -712,10 +994,18 @@ class LLMSummarizer:
                 "publications": pub_list,
                 "supporting_text": text_list,
                 "confidence_scores": data.get('confidence_scores', {}),
+                "knowledge_level": data.get('knowledge_level'),
+                "agent_type": data.get('agent_type'),
                 "importance_score": round(data.get('importance_score', 0.0), 2),
                 "publication_count": data.get('publication_count', len(publications)),
                 "connects_to_query_genes": data.get('connects_to_query_genes', [])
             }
+
+            # Human-readable qualified relationship (e.g. "causes increased activity"),
+            # so the LLM can explain qualifiers without the reader knowing biolink.
+            qualified = self._compose_qualified_relationship(data.get('qualifiers', []))
+            if qualified:
+                edge_obj["qualified_relationship"] = qualified
 
             edges.append(edge_obj)
 
@@ -746,7 +1036,8 @@ class LLMSummarizer:
         self,
         context: Dict[str, Any],
         category: str,
-        graph: nx.MultiDiGraph
+        graph: nx.MultiDiGraph,
+        system_prompt: Optional[str] = None
     ) -> Tuple[str, List[CitationGraph]]:
         """Generate summary with XML-based citation extraction.
 
@@ -755,21 +1046,26 @@ class LLMSummarizer:
 
         Args:
             context: Prepared JSON context dictionary
-            category: Node category
+            category: Node category (used for the default category prompt and logging)
             graph: Full graph for citation extraction
+            system_prompt: Optional pre-built system prompt. When omitted, the
+                category summary prompt is used (preserves existing behavior).
 
         Returns:
             Tuple of (summary_text, citations)
         """
-        # Build the XML-structured prompt
-        system_prompt = self._build_system_prompt(category)
+        # Build the XML-structured prompt (default: category prompt)
+        if system_prompt is None:
+            system_prompt = self._build_system_prompt(category)
 
         try:
             # Convert context to JSON string
             context_json_str = json.dumps(context, indent=2)
 
-            # Single API call with XML-structured prompt
-            response = self.client.messages.create(
+            # Single API call with XML-structured prompt.
+            # temperature is requested for deterministic output but dropped
+            # automatically for models that deprecate it (see _create_message).
+            response = self._create_message(
                 model=self.model,
                 max_tokens=8000,  # Increased to ensure room for citations + summary
                 temperature=0.1,  # Low temperature for consistent output
@@ -805,7 +1101,8 @@ class LLMSummarizer:
             if hasattr(response, 'usage'):
                 actual_input = response.usage.input_tokens
                 actual_output = response.usage.output_tokens
-                actual_cost = (actual_input / 1_000_000) * 1.00 + (actual_output / 1_000_000) * 5.00
+                in_price, out_price = get_model_pricing(self.model)
+                actual_cost = (actual_input / 1_000_000) * in_price + (actual_output / 1_000_000) * out_price
                 logger.info(
                     f"Generated summary for {category}: {len(citations)} citations, {len(summary_text)} chars | "
                     f"Actual usage: {actual_input:,} input + {actual_output:,} output = ${actual_cost:.4f}"
@@ -816,8 +1113,11 @@ class LLMSummarizer:
             return summary_text, citations
 
         except Exception as e:
-            logger.error(f"LLM generation failed for {category}: {e}")
-            return f"Failed to generate summary for {category}: {e}", []
+            # Log full detail to the server/terminal and re-raise so the caller can
+            # show a clean message and avoid caching a failed result. The raw API
+            # error must NOT become user-facing summary text.
+            logger.error(f"LLM generation failed for {category}: {e}", exc_info=True)
+            raise
 
     def _build_system_prompt(self, category: str) -> str:
         """Build the system prompt for category summaries from external file.

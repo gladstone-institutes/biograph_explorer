@@ -51,7 +51,7 @@ class Settings(BaseModel):
 
     # Claude API settings (Phase 3)
     claude_api_key: Optional[str] = Field(default=None, description="Anthropic API key")
-    claude_model: str = Field(default="claude-haiku-4", description="Claude model to use")
+    claude_model: str = Field(default="claude-haiku-4-5", description="Claude model to use")
     claude_max_tokens: int = Field(default=1000, description="Max tokens per response")
 
     # UI settings

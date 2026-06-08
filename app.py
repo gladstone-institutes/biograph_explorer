@@ -8,6 +8,8 @@ from pathlib import Path
 import pandas as pd
 import logging
 import json
+import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Dict, Any
 
@@ -29,11 +31,79 @@ from geneset_translator.utils.infores_utils import (
     filter_relevant_infores,
     generate_source_summary,
 )
-from geneset_translator.ui.summary_tab import render_summary_tab
+from geneset_translator.ui.summary_tab import render_summary_tab, _format_publication_link
+from geneset_translator.utils.model_utils import (
+    DEFAULT_MODEL_ID,
+    fetch_available_models,
+)
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+
+@st.cache_resource
+def _node_summary_executor() -> ThreadPoolExecutor:
+    """Shared thread pool that runs node-summary generation off the main thread,
+    so the app stays interactive while Claude generates a summary."""
+    return ThreadPoolExecutor(max_workers=2)
+
+
+def _run_node_summary(model, graph, node_curie, disease_curie, query_genes, infores_metadata):
+    """Generate a node summary in a worker thread.
+
+    Runs off the Streamlit thread, so it must NOT touch st.session_state; it
+    returns the SummaryData and the main thread stores it via Future.result().
+    """
+    from geneset_translator.core.llm_summarizer import LLMSummarizer
+    summarizer = LLMSummarizer(model=model)
+    return summarizer.generate_node_summary(
+        graph, node_curie, disease_curie, query_genes, infores_metadata
+    )
+
+
+def _format_node_summary_for_infopanel(summary) -> str:
+    """Turn a SummaryData into a concise infopanel string with clickable PMIDs.
+
+    Citation markers are stripped (the infopanel has no citation cards to link
+    to), and the unique publications across all citations are appended as
+    clickable links, which the streamlit-cytoscape 0.2.1 infopanel renders.
+    """
+    text = re.sub(r'\[Citation \d+\]', '', summary.summary_text)
+    text = re.sub(r'\s+([.,;:])', r'\1', text)  # drop space left before punctuation
+    text = re.sub(r'\s{2,}', ' ', text).strip()
+
+    seen, pmids = set(), []
+    for citation in summary.citations:
+        for pub in citation.publication_ids:
+            if pub not in seen:
+                seen.add(pub)
+                pmids.append(pub)
+    if pmids:
+        links = " | ".join(_format_publication_link(p) for p in pmids[:10])
+        text = f"{text}\n\nSources: {links}"
+    return text
+
+
+@st.fragment(run_every=1.0)
+def _poll_node_summaries():
+    """Poll in-flight node-summary jobs. While jobs are pending only this
+    fragment reruns (the graph stays put); when a job finishes, store its
+    formatted text and trigger a full app rerun so the summary is injected into
+    the node and appears in the infopanel."""
+    futures = st.session_state.node_summary_futures
+    done_ids = [nid for nid, fut in futures.items() if fut.done()]
+    for nid in done_ids:
+        try:
+            result = futures[nid].result()
+            st.session_state.node_summaries[nid] = _format_node_summary_for_infopanel(result)
+        except Exception as e:
+            logger.error(f"Node summary generation failed for {nid}: {e}")
+            st.session_state.node_summaries.pop(nid, None)  # clear the placeholder
+            st.session_state.node_summary_error = str(e)
+        del futures[nid]
+    if done_ids:
+        st.rerun(scope="app")
 
 
 def notify(message: str, msg_type: str = "info", icon: str = None):
@@ -155,6 +225,12 @@ if 'gene_group_filter' not in st.session_state:
     st.session_state.gene_group_filter = "All Groups"
 if 'name_search_filter' not in st.session_state:
     st.session_state.name_search_filter = ""
+# Note: 'selected_model' is owned by the sidebar selectbox widget (key="selected_model");
+# it is not pre-seeded here to avoid Streamlit's "default value + Session State" warning.
+if 'node_summaries' not in st.session_state:
+    st.session_state.node_summaries = {}  # node_curie -> summary text (injected into infopanel)
+if 'node_summary_futures' not in st.session_state:
+    st.session_state.node_summary_futures = {}  # node_curie -> in-flight Future
 
 # Title
 st.markdown("### :material/biotech: GeneSet Translator")
@@ -610,10 +686,37 @@ st.sidebar.checkbox(
 
 # API key status
 import os
-if os.environ.get('ANTHROPIC_API_KEY'):
+_api_key_present = bool(os.environ.get('ANTHROPIC_API_KEY'))
+if _api_key_present:
     st.sidebar.success("✅ LLM Summary feature enabled")
 else:
     st.sidebar.info("ℹ️ Add ANTHROPIC_API_KEY to .env for LLM summaries")
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _cached_model_list(api_key_present: bool):
+    """Fetch the available Claude models (cached daily).
+
+    Keyed on a bool so the list refreshes if the key appears/disappears, without
+    ever placing the secret in the cache key.
+    """
+    return fetch_available_models(os.environ.get('ANTHROPIC_API_KEY'))
+
+
+_models = _cached_model_list(_api_key_present)
+_model_ids = [m['id'] for m in _models]
+_id_to_name = {m['id']: m['display_name'] for m in _models}
+_default_idx = _model_ids.index(DEFAULT_MODEL_ID) if DEFAULT_MODEL_ID in _model_ids else 0
+st.sidebar.selectbox(
+    "Claude Model",
+    options=_model_ids,
+    index=_default_idx,
+    format_func=lambda mid: _id_to_name.get(mid, mid),
+    key="selected_model",
+    help="Model used for AI summaries. Pricing varies by model.",
+)
+if not _api_key_present:
+    st.sidebar.caption("Showing default model list (no API key detected).")
 
 # Main area
 if not run_query and not st.session_state.graph:
@@ -646,6 +749,9 @@ if run_query:
     # Clear previous query messages
     st.session_state.query_messages = []
     st.session_state.category_mismatch_detail = None
+    # Drop AI node summaries (and any in-flight jobs) from any prior gene set
+    st.session_state.node_summaries = {}
+    st.session_state.node_summary_futures = {}
 
     try:
         # Validate input
@@ -715,6 +821,12 @@ if run_query:
         intermediate_str = ", ".join([c.replace("biolink:", "") for c in intermediate_cats])
         notify(f"Pathfinder query: Found {len(response.edges)} edges from {response.apis_succeeded}/{response.apis_queried} APIs{filter_info}", "success")
         notify(f"Query: Gene -> [{intermediate_str}] -> {disease_curie}", "info", "timeline")
+        if response.metadata.get("granularity_filter_bypassed"):
+            notify(
+                "The selected granularity filter would have removed all results, so unfiltered "
+                "results are shown. Loosen the granularity preset to refine.",
+                "warning",
+            )
 
         # Step 3: Build graph
         status_text.text("Building knowledge graph...")
@@ -1655,7 +1767,7 @@ if st.session_state.graph:
             filter_graph_by_gene_group,
             calculate_edge_font_size,
         )
-        from streamlit_cytoscape import streamlit_cytoscape
+        from streamlit_cytoscape import streamlit_cytoscape, InfopanelAction
 
         display_graph = st.session_state.graph
 
@@ -1800,6 +1912,7 @@ if st.session_state.graph:
             base_node_size=base_node_size,
             use_metric_sizing=use_metric_sizing,
             edge_width=edge_width,
+            node_summaries=st.session_state.node_summaries,
         )
 
         if viz_data:
@@ -1890,6 +2003,46 @@ if st.session_state.graph:
                 "target-arrow-color": "data(_preservedArrowColor)",
             }
 
+            # Callback for the "AI Summary" infopanel action. Generation runs in a
+            # background thread (kicked off here, polled by _poll_node_summaries),
+            # so the app never freezes. The result is injected into the node's data
+            # via st.session_state.node_summaries on the next full rerun; the 0.2.1
+            # component preserves edge collapse + selection across that update.
+            # Nodes only (edges are ignored).
+            def _on_cyto_action():
+                val = st.session_state.get(cytoscape_key)
+                if not isinstance(val, dict) or val.get("action") != "ai_summary":
+                    return
+                data = val.get("data") or {}
+                if data.get("element_group") != "nodes":
+                    return
+                clicked = data.get("element_id")
+                # Skip if already summarized or already generating (dedupe clicks).
+                if (not clicked or clicked in st.session_state.node_summaries
+                        or clicked in st.session_state.node_summary_futures):
+                    return
+                if not os.environ.get("ANTHROPIC_API_KEY"):
+                    st.session_state.node_summary_error = (
+                        "AI summary requires ANTHROPIC_API_KEY in your .env file."
+                    )
+                    return
+                # Kick off background generation and return immediately. We do NOT
+                # write a placeholder into the graph here: that would change the
+                # elements on click and force the component to re-render the graph.
+                # The button's spinner=True gives click feedback; the summary is
+                # injected only once, when the result lands.
+                fut = _node_summary_executor().submit(
+                    _run_node_summary,
+                    st.session_state.get("selected_model", DEFAULT_MODEL_ID),
+                    st.session_state.graph,
+                    clicked,
+                    st.session_state.disease_curie,
+                    st.session_state.query_genes,
+                    st.session_state.infores_metadata,
+                )
+                st.session_state.node_summary_futures[clicked] = fut
+                st.session_state.node_summary_error = None
+
             streamlit_cytoscape(
                 viz_data["elements"],
                 layout=viz_data["layout"],
@@ -1902,11 +2055,27 @@ if st.session_state.graph:
                 collapse_parallel_edges=(not pub_filter),
                 priority_edge_label=priority_label,
                 meta_edge_style=meta_edge_style,
+                # AI Summary action button in the infopanel (nodes only). spinner=True
+                # gives instant click feedback while generation runs in the background.
+                infopanel_actions=[InfopanelAction("ai_summary", "AI Summary", icon="science", spinner=True)],
+                on_change=_on_cyto_action,
             )
+
+            # While a summary is generating, poll for its result without blocking the
+            # graph (only this fragment reruns until the job finishes).
+            if st.session_state.node_summary_futures:
+                _poll_node_summaries()
+
+            # Surface any error from the AI Summary action (raw API errors are logged
+            # to the terminal, not shown here).
+            if st.session_state.get("node_summary_error"):
+                st.warning(st.session_state.node_summary_error)
+                st.session_state.node_summary_error = None
 
             st.caption("""
             **:material/lightbulb: How to explore:**
             - **Drag** to pan | **Scroll** to zoom | **Click** node or edge to select
+            - **Select a node, then click "AI Summary"** in the info panel for a Claude summary of its edges
             - **Double-click** collapsed edge to expand | **Fullscreen** in top-right
             """)
 

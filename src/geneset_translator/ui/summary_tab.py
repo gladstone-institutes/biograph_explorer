@@ -13,8 +13,14 @@ import networkx as nx
 import streamlit as st
 
 from geneset_translator.core.llm_summarizer import LLMSummarizer, SummaryData, CitationGraph, StagedCategoryQuery
+from geneset_translator.utils.model_utils import DEFAULT_MODEL_ID
 
 logger = logging.getLogger(__name__)
+
+
+def _selected_model() -> str:
+    """Model id chosen in the sidebar (falls back to the default)."""
+    return st.session_state.get("selected_model", DEFAULT_MODEL_ID)
 
 
 def render_summary_tab(
@@ -113,12 +119,13 @@ def render_summary_tab(
     # Stage queries and compute accurate token counts
     if len(selected_categories) > 0:
         # Create staging key to detect when we need to restage
-        staging_key = f"{','.join(sorted(selected_categories))}|{max_nodes}|{min_gene_frequency}|{graph.number_of_edges()}"
+        # Include the model so changing it recalculates token cost.
+        staging_key = f"{','.join(sorted(selected_categories))}|{max_nodes}|{min_gene_frequency}|{graph.number_of_edges()}|{_selected_model()}"
 
         # Only restage if inputs changed
         if st.session_state.get('staging_key') != staging_key:
             with st.spinner("Calculating token counts..."):
-                summarizer = LLMSummarizer()
+                summarizer = LLMSummarizer(model=_selected_model())
                 staged_queries, total_cost = summarizer.stage_all_categories(
                     graph=graph,
                     categories=selected_categories,
@@ -168,7 +175,7 @@ def render_summary_tab(
 
     # Generate summaries
     if generate_btn:
-        summarizer = LLMSummarizer()
+        summarizer = LLMSummarizer(model=_selected_model())
         logger.info(f"Starting LLM summary generation for {len(selected_categories)} categories")
         progress_bar = st.progress(0)
         status = st.empty()
