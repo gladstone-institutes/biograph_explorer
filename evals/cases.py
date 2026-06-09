@@ -38,7 +38,9 @@ CASES: List[EvalCase] = [
         max_calls=2,
         answer_rubric=(
             "A good answer names specific drugs/chemicals returned for FLT3 and is grounded in the "
-            "neighborhood result, not invented. It should not claim a gene-gene network was used."
+            "neighborhood result, not invented. It should not claim a gene-gene network was used. "
+            "Specific drug-gene claims should cite the edge's publication links / primary source, and "
+            "any non-tool background should be marked as such."
         ),
     ),
     EvalCase(
@@ -49,7 +51,8 @@ CASES: List[EvalCase] = [
         expected_order_prefix=["resolve_genes", "path_between"],
         answer_rubric=(
             "A good answer resolves BOTH BCL2 and venetoclax to CURIEs, runs path_between, and "
-            "describes whether/how they connect via intermediates."
+            "describes whether/how they connect via intermediates, citing the path's publication "
+            "links where available."
         ),
     ),
     EvalCase(
@@ -59,10 +62,13 @@ CASES: List[EvalCase] = [
         expected_tools=["resolve_genes", "gene_network"],
         expected_order_prefix=["resolve_genes", "gene_network"],
         forbidden_tools=["gene_neighborhood"],
-        max_calls=2,
+        # The gene-gene network is large (thousands of edges), so the agent is expected to follow up
+        # with cluster_graph (and optionally filter_graph) to summarize it -- allow that headroom.
+        max_calls=4,
         answer_rubric=(
-            "A good answer builds a gene-gene network among the four genes and summarizes the direct "
-            "interactions found."
+            "A good answer builds a gene-gene network among the genes and summarizes the direct "
+            "interactions found; for a large network it may cluster the result and describe the modules "
+            "rather than listing raw edges."
         ),
     ),
     EvalCase(
@@ -73,7 +79,32 @@ CASES: List[EvalCase] = [
         expected_order_prefix=["resolve_genes", "gene_neighborhood"],
         answer_rubric=(
             "A good answer finds FLT3 drugs, then calls edge_evidence for a specific FLT3-drug edge "
-            "and reports publications/scores rather than inventing them."
+            "and reports the actual publications/scores as citations rather than inventing them, with a "
+            "Sources list of the publication links used."
+        ),
+    ),
+    EvalCase(
+        id="path_mechanism",
+        gene_symbols=GENESET,
+        question="What intermediate genes or proteins connect FLT3 and BCL2?",
+        expected_tools=["resolve_genes", "path_between"],
+        expected_order_prefix=["resolve_genes", "path_between"],
+        forbidden_tools=["gene_network"],
+        answer_rubric=(
+            "A good answer recognizes this as a connection question between two entities and uses "
+            "path_between (not separate neighborhoods) to describe the intermediates linking them, "
+            "citing publication links where available."
+        ),
+    ),
+    EvalCase(
+        id="single_cell_celltypes",
+        gene_symbols=GENESET,
+        question="These results are from a single-cell experiment. Which cell types most express these genes?",
+        expected_tools=["cell_type_expression"],
+        answer_rubric=(
+            "A good answer calls cell_type_expression (cell_type scope) to ground per-gene cell-type "
+            "specificity from HPA and does NOT assert cell types the tool did not return. It may run a "
+            "finder first to have a result to annotate."
         ),
     ),
     EvalCase(
@@ -93,7 +124,7 @@ CASES: List[EvalCase] = [
         expected_tools=["resolve_genes", "node_metadata"],
         expected_order_prefix=["resolve_genes", "node_metadata"],
         forbidden_tools=["gene_network", "path_between"],
-        max_calls=2,
+        max_calls=3,  # resolve + node_metadata, tolerating one exploratory finder call
         answer_rubric=(
             "A good answer resolves FLT3, calls node_metadata, and reports the GO biological-process / "
             "molecular-function terms and gene type it returns, without inventing functions."
@@ -134,6 +165,23 @@ CASES: List[EvalCase] = [
         answer_rubric=(
             "A good answer uses cell_type_expression (scope tissue) and reports per-gene tissue "
             "specificity from HPA. It may first run a finder to have a result to annotate."
+        ),
+    ),
+    EvalCase(
+        id="cluster_top_per_cluster",
+        gene_symbols=GENESET,
+        question=(
+            "Build the interaction network among these genes, cluster it into modules, and show the "
+            "top few nodes of each cluster on the graph."
+        ),
+        expected_tools=["resolve_genes", "gene_network", "cluster_graph", "filter_graph"],
+        expected_order_prefix=["resolve_genes", "gene_network", "cluster_graph", "filter_graph"],
+        forbidden_tools=["gene_neighborhood"],
+        max_calls=5,
+        answer_rubric=(
+            "A good answer builds the gene-gene network, clusters it (stating the clustering method / "
+            "topology), then shows a BALANCED top-N-per-cluster view via filter_graph top_per_cluster "
+            "(not overall top_n), and describes each cluster's entity type and key named members."
         ),
     ),
     EvalCase(

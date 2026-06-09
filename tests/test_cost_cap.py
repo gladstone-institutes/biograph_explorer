@@ -19,6 +19,18 @@ def _usage(input_tokens=0, output_tokens=0, cache_read=0, cache_create=0):
     )
 
 
+def test_cost_tracker_add_tolerates_usage_without_cache_fields():
+    """A summarizer usage object only has input/output tokens (no cache fields); add must not crash
+    and must still count the input/output cost (so node-summary spend reaches the panel)."""
+    tracker = CostTracker()
+    bare = types.SimpleNamespace(input_tokens=1000, output_tokens=500)  # no cache_* attrs
+    usd = tracker.add(bare, "claude-haiku-4-5")
+    assert usd > 0
+    assert tracker.input_tokens == 1000 and tracker.output_tokens == 500
+    assert tracker.total_usd == usd
+    assert tracker.add(None, "claude-haiku-4-5") == 0.0  # None usage is a no-op
+
+
 def _text_block(text):
     return types.SimpleNamespace(type="text", text=text)
 
@@ -257,3 +269,159 @@ def test_loop_appends_tool_results_then_finishes():
     ]
     assert len(tool_result_turns) == 1
     assert tool_result_turns[0]["content"][0]["tool_use_id"] == "t1"
+
+
+# -- Stop button: cooperative cancellation -------------------------------------------------
+class _StopAfter:
+    """should_stop callable: returns False for the first ``n`` checks, then True."""
+
+    def __init__(self, n: int) -> None:
+        self.n = n
+        self.calls = 0
+
+    def __call__(self) -> bool:
+        self.calls += 1
+        return self.calls > self.n
+
+
+def test_should_stop_at_top_of_loop_makes_no_model_call():
+    stub = _StubLLM([_resp([_tool_block("noop", "t1", {})], "tool_use", _usage(input_tokens=10))])
+    loop = _loop(stub, max_iterations=99)
+    result = loop.run(
+        [{"role": "user", "content": "hi"}], _ctx(), CostTracker(),
+        cost_cap_usd=10.0, should_stop=_StopAfter(0),
+    )
+    assert stub.calls == 0  # stopped before any model call
+    assert "Stopped at your request" in result.stop_note
+    # messages untouched -> still API-valid (just the original user turn)
+    assert result.messages == [{"role": "user", "content": "hi"}]
+
+
+def test_should_stop_before_tools_keeps_messages_valid_and_skips_tools():
+    order = []
+    registry = ToolRegistry([_RecorderTool("rec", True, order)])
+    step1 = _resp([_tool_block("rec", "t1", {})], "tool_use", _usage(input_tokens=10))
+    loop = AgentLoop(_StubLLM([step1]), registry, "claude-sonnet-4-6", "sys", max_iterations=99)
+    ctx = _ctx()
+    # top check (1st) False -> model call -> pre-dispatch check (2nd) True -> stop before running tools
+    result = loop.run(
+        [{"role": "user", "content": "hi"}], ctx, CostTracker(),
+        cost_cap_usd=10.0, should_stop=_StopAfter(1),
+    )
+    assert order == []  # the requested tool was NEVER executed
+    assert "before running the requested tools" in result.stop_note
+    # the assistant tool_use is answered by a synthetic tool_result -> conversation stays resumable
+    last = result.messages[-1]
+    assert last["role"] == "user"
+    assert last["content"][0]["type"] == "tool_result"
+    assert last["content"][0]["tool_use_id"] == "t1"
+
+
+def test_should_stop_none_is_default_no_op():
+    # the existing end_turn test path must be unaffected when should_stop is omitted
+    end = _resp([_text_block("answer")], "end_turn", _usage(input_tokens=10, output_tokens=2))
+    loop = _loop(_StubLLM([end]))
+    result = loop.run([{"role": "user", "content": "hi"}], _ctx(), CostTracker(), cost_cap_usd=1.0)
+    assert result.stop_note is None and result.final_text == "answer"
+
+
+def _commit_fixture(turn_display, display_base):
+    """A SimpleNamespace session + turn objects for exercising chat_page._commit_turn."""
+    from types import SimpleNamespace
+
+    from geneset_translator.agent.display_ops import DisplayGraph
+
+    persistent = DisplayGraph()
+    import networkx as nx
+
+    seed = nx.MultiDiGraph()
+    seed.add_node("A")
+    persistent.replace(seed)  # the persistent session display has some prior content + version
+
+    ss = SimpleNamespace(
+        chat_messages=[], chat_stash_store={}, chat_tool_log=[], chat_query_cache={},
+        chat_annotations={}, chat_latest_result_id=None, chat_display_graph=persistent,
+        chat_cost=CostTracker(),
+    )
+    turn_ctx = SimpleNamespace(
+        tool_log=[{"name": "gene_network", "args": {}}],
+        query_cache={"k": "v"},
+        annotations={"NCBIGene:1": {}},
+        latest_result_id="res_2",
+        display=turn_display,
+    )
+    turn_store = {"res_1": object(), "res_2": object()}
+    turn_cost = CostTracker(total_usd=0.123)
+    result = SimpleNamespace(messages=[{"role": "user", "content": "hi"}], final_text="The answer.")
+    return ss, turn_ctx, turn_store, turn_cost, result, display_base
+
+
+def test_commit_turn_copies_isolated_state_into_session():
+    """_commit_turn moves the worker's isolated turn state into session state and returns the cleaned
+    answer (the worker never writes session_state directly)."""
+    import networkx as nx
+
+    from geneset_translator.agent.display_ops import DisplayGraph
+    from geneset_translator.ui import chat_page
+
+    turn_display = DisplayGraph()  # no display edits this turn
+    base = turn_display.version
+    ss, turn_ctx, turn_store, turn_cost, result, _ = _commit_fixture(turn_display, base)
+
+    answer = chat_page._commit_turn(ss, turn_ctx, turn_store, turn_cost, result, base)
+    assert answer == "The answer."
+    assert ss.chat_messages is result.messages
+    assert ss.chat_stash_store is turn_store
+    assert ss.chat_tool_log == [{"name": "gene_network", "args": {}}]
+    assert ss.chat_latest_result_id == "res_2"
+    assert ss.chat_cost is turn_cost
+
+
+def test_commit_turn_bumps_persistent_display_version_on_change():
+    """Regression: a turn that edits the display must commit onto the PERSISTENT DisplayGraph so its
+    version moves monotonically (the graph/viz caches + component key key on it). A per-turn fresh
+    object reset the counter and the on-screen graph stale-cached (filter_graph didn't refresh)."""
+    import networkx as nx
+
+    from geneset_translator.agent.display_ops import DisplayGraph
+    from geneset_translator.ui import chat_page
+
+    turn_display = DisplayGraph()
+    turn_display.replace(nx.MultiDiGraph())  # seed (baseline)
+    base = turn_display.version
+    changed = nx.MultiDiGraph()
+    changed.add_node("B")
+    changed.add_node("C")
+    turn_display.replace(changed)  # the turn edited the display -> version moves past baseline
+
+    ss, turn_ctx, turn_store, turn_cost, result, _ = _commit_fixture(turn_display, base)
+    persistent = ss.chat_display_graph
+    before = persistent.version
+
+    chat_page._commit_turn(ss, turn_ctx, turn_store, turn_cost, result, base)
+
+    assert ss.chat_display_graph is persistent  # same object kept (monotonic version)
+    assert persistent.version > before          # version advanced -> caches/keys invalidate
+    assert set(persistent.snapshot().nodes) == {"B", "C"}  # new content is shown
+
+
+def test_commit_turn_leaves_display_untouched_when_unchanged():
+    """A text-only turn (no display edit) must not bump the display version (no needless remount)."""
+    import networkx as nx
+
+    from geneset_translator.agent.display_ops import DisplayGraph
+    from geneset_translator.ui import chat_page
+
+    turn_display = DisplayGraph()
+    turn_display.replace(nx.MultiDiGraph())
+    base = turn_display.version  # no further edits -> version stays at base
+
+    ss, turn_ctx, turn_store, turn_cost, result, _ = _commit_fixture(turn_display, base)
+    persistent = ss.chat_display_graph
+    before_version = persistent.version
+    before_nodes = set(persistent.snapshot().nodes)
+
+    chat_page._commit_turn(ss, turn_ctx, turn_store, turn_cost, result, base)
+
+    assert persistent.version == before_version  # untouched
+    assert set(persistent.snapshot().nodes) == before_nodes

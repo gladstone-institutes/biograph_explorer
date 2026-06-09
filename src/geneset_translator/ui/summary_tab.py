@@ -40,7 +40,7 @@ def render_summary_tab(
     api_key = os.environ.get('ANTHROPIC_API_KEY')
 
     if not api_key:
-        st.warning("⚠️ LLM Summary requires ANTHROPIC_API_KEY. Add it to your .env file.")
+        st.warning("LLM Summary requires ANTHROPIC_API_KEY. Add it to your .env file.")
         st.info("Get your API key from: https://console.anthropic.com/")
         st.code("cp .env.example .env\n# Then add: ANTHROPIC_API_KEY=sk-ant-...", language="bash")
         return
@@ -154,7 +154,7 @@ def render_summary_tab(
             for category in selected_categories:
                 sq = staged_queries_dict.get(category)
                 if sq:
-                    cache_icon = " 💾" if sq.is_cached else ""
+                    cache_icon = " (cached)" if sq.is_cached else ""
                     cost_str = "$0.0000 (cached)" if sq.is_cached else f"${sq.estimated_cost:.4f}"
                     st.markdown(
                         f"**{category}**{cache_icon}: "
@@ -184,7 +184,7 @@ def render_summary_tab(
         stored_min_gene_freq = st.session_state.get('min_gene_frequency', min_gene_frequency)
 
         for i, category in enumerate(selected_categories):
-            status.markdown(f"### 🤖 Generating summary for **{category}**...")
+            status.markdown(f"### Generating summary for **{category}**...")
 
             try:
                 summary_data = summarizer.generate_category_summary(
@@ -199,19 +199,18 @@ def render_summary_tab(
 
                 # Show if cached or newly generated
                 was_cached = summary_data.metadata.get('from_cache', False)
-                cache_indicator = "💾" if was_cached else "✨"
 
                 st.session_state.summaries[category] = summary_data
                 logger.info(f"{'Loaded cached' if was_cached else 'Generated'} summary for {category}: {len(summary_data.citations)} citations")
-                status.markdown(f"{cache_indicator} **{category}** {'(cached)' if was_cached else '(generated)'}")
+                status.markdown(f"**{category}** {'(cached)' if was_cached else '(generated)'}")
 
             except Exception as e:
                 logger.error(f"Failed to generate summary for {category}: {e}")
-                st.error(f"❌ Failed to generate summary for {category}: {e}")
+                st.error(f"Failed to generate summary for {category}: {e}")
 
             progress_bar.progress((i + 1) / len(selected_categories))
 
-        status.markdown("✅ All summaries generated!")
+        status.markdown("All summaries generated.")
         st.rerun()
 
     # Display existing summaries

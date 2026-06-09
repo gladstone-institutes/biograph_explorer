@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
 
 from . import display_ops
 from .display_ops import DisplayState
+from .graph_clustering import summarize_graph
 from .tct_adapter import (
     HUMAN_TAXON,
     ResultStash,
@@ -61,6 +62,65 @@ def _df_head_records(df: Any, n: int) -> "tuple[List[dict], int]":
         return df.head(n).to_dict("records"), int(len(df))
     except Exception:  # noqa: BLE001
         return [], 0
+
+
+def _edge_publications(edge: Dict[str, Any]) -> List[str]:
+    """Up to a few normalized publication links for an edge, from either the direct ``publications``
+    key (synthetic/recorded edges) or the TRAPI ``attributes`` (live TCT edges)."""
+    from geneset_translator.utils.publication_utils import normalize_publication_id
+
+    raw = edge.get("publications")
+    if not raw and edge.get("attributes"):
+        try:
+            from TCT.attribute_extraction import extract_rich_edge_attributes
+
+            raw = extract_rich_edge_attributes(edge["attributes"]).get("publications")
+        except Exception:  # noqa: BLE001
+            raw = None
+    out: List[str] = []
+    for pub in raw or []:
+        norm = normalize_publication_id(str(pub))
+        if norm and norm.isdigit():  # TCT often returns bare-digit PMIDs -> make them linkable
+            norm = f"PMID:{norm}"
+        if norm and norm not in out:
+            out.append(norm)
+    return out
+
+
+def _edge_primary_source(edge: Dict[str, Any]) -> Optional[str]:
+    """The primary knowledge source infores id for an edge (TRAPI ``sources`` or the
+    synthetic ``primary_sources`` key)."""
+    for src in edge.get("sources", []) or []:
+        if isinstance(src, dict) and src.get("resource_role") == "primary_knowledge_source":
+            return src.get("resource_id")
+    prim = edge.get("primary_sources") or []
+    return prim[0] if prim else None
+
+
+def _edge_evidence_index(result: Any, max_pubs: int = 3) -> Dict[tuple, Dict[str, Any]]:
+    """Map (subject, object) -> {publications, primary_source} from a result's knowledge graph(s),
+    so finder rows can carry citable evidence without an extra edge_evidence call."""
+    from .tct_adapter import _knowledge_graphs
+
+    index: Dict[tuple, Dict[str, Any]] = {}
+    for kg in _knowledge_graphs(result):
+        try:
+            items = list(kg.items())
+        except Exception:  # noqa: BLE001
+            continue
+        for _eid, edge in items:
+            if not isinstance(edge, dict):
+                continue
+            key = (edge.get("subject"), edge.get("object"))
+            entry = index.setdefault(key, {"publications": [], "primary_source": None})
+            for pub in _edge_publications(edge):
+                if pub not in entry["publications"]:
+                    entry["publications"].append(pub)
+            if not entry["primary_source"]:
+                entry["primary_source"] = _edge_primary_source(edge)
+    for entry in index.values():
+        entry["publications"] = entry["publications"][:max_pubs]
+    return index
 
 
 # --------------------------------------------------------------------------------------
@@ -144,9 +204,16 @@ class GeneNeighborhoodTool:
         result_id = ctx.stash.put(nb)
         ctx.display.reset()  # new base graph; clears any prior display curation
         top, n = _df_head_records(getattr(nb, "ranked", None), 25)
+        input_node = getattr(nb, "input_node_id", args["gene_curie"])
+        index = _edge_evidence_index(nb)
+        for row in top[:10]:  # attach citable evidence to the top edges (bounded for token budget)
+            ev = index.get((input_node, row.get("output_node")))
+            if ev and (ev["publications"] or ev["primary_source"]):
+                row["publications"] = ev["publications"]
+                row["primary_source"] = ev["primary_source"]
         return {
             "result_id": result_id,
-            "input_node_id": getattr(nb, "input_node_id", args["gene_curie"]),
+            "input_node_id": input_node,
             "n_results": n,
             "top_edges": top,
         }
@@ -185,12 +252,21 @@ class PathBetweenTool:
         result_id = ctx.stash.put(pr)
         ctx.display.reset()  # new base graph; clears any prior display curation
         top, n = _df_head_records(getattr(pr, "paths", None), 25)
+        # A path spans several edges; surface a small pool of the path's publication links so the
+        # model can cite the connection (use edge_evidence for a specific intermediate edge).
+        index = _edge_evidence_index(pr, max_pubs=2)
+        evidence_pubs: List[str] = []
+        for entry in index.values():
+            for pub in entry["publications"]:
+                if pub not in evidence_pubs:
+                    evidence_pubs.append(pub)
         return {
             "result_id": result_id,
             "node1_id": getattr(pr, "node1_id", args["node1_curie"]),
             "node2_id": getattr(pr, "node2_id", args["node2_curie"]),
             "n_paths": n,
             "top_paths": top,
+            "evidence_publications": evidence_pubs[:8],
         }
 
 
@@ -231,7 +307,15 @@ class GeneNetworkTool:
                 if obj in degree:
                     degree[obj] += 1
                 if len(top) < 25:
-                    top.append({"subject": subj, "predicate": edge.get("predicate"), "object": obj})
+                    row = {"subject": subj, "predicate": edge.get("predicate"), "object": obj}
+                    if len(top) < 10:  # citable evidence for the top edges (bounded for tokens)
+                        pubs = _edge_publications(edge)
+                        prim = _edge_primary_source(edge)
+                        if pubs:
+                            row["publications"] = pubs
+                        if prim:
+                            row["primary_source"] = prim
+                    top.append(row)
         except Exception:  # noqa: BLE001
             pass
         try:
@@ -503,15 +587,21 @@ class FilterGraphTool:
         "Change WHAT IS SHOWN in the current on-screen graph, without running a new query. Call "
         "this for 'show only', 'trim', 'focus on', 'genes connected to X', or 'the most connected'. "
         "connected_to=<CURIE> keeps that node and its direct neighbors; category keeps one node "
-        "type (e.g. 'ChemicalEntity'); top_n keeps the most-connected nodes (by degree). Query "
-        "genes and the disease are always kept."
+        "type (e.g. 'ChemicalEntity'); top_n keeps the most-connected nodes by degree OVERALL; "
+        "top_per_cluster keeps the most-connected nodes WITHIN EACH cluster (run cluster_graph first) "
+        "-- use this, not top_n, for a balanced 'top nodes of each cluster' view. Query genes and the "
+        "disease are always kept."
     )
     input_schema = {
         "type": "object",
         "properties": {
             "connected_to": {"type": "string", "description": "CURIE; keep this node and its neighbors."},
             "category": {"type": "string", "description": "Short category to keep, e.g. ChemicalEntity, Gene."},
-            "top_n": {"type": "integer", "description": "Keep the top_n most-connected nodes (by degree)."},
+            "top_n": {"type": "integer", "description": "Keep the top_n most-connected nodes by degree OVERALL."},
+            "top_per_cluster": {
+                "type": "integer",
+                "description": "Keep the top-K most-connected nodes within EACH cluster (needs cluster_graph first).",
+            },
         },
     }
 
@@ -531,8 +621,15 @@ class FilterGraphTool:
         if args.get("top_n"):
             graph = display_ops.trim_to_top_degree(graph, int(args["top_n"]), keep)
             applied.append(f"top_{int(args['top_n'])}_by_degree")
+        if args.get("top_per_cluster"):
+            if not any(graph.nodes[n].get("cluster") is not None for n in graph.nodes):
+                raise ValueError(
+                    "no clusters on the current graph; run cluster_graph first, then filter by top_per_cluster"
+                )
+            graph = display_ops.trim_to_top_per_cluster(graph, int(args["top_per_cluster"]), keep)
+            applied.append(f"top_{int(args['top_per_cluster'])}_per_cluster")
         if not applied:
-            raise ValueError("specify at least one of: connected_to, category, top_n")
+            raise ValueError("specify at least one of: connected_to, category, top_n, top_per_cluster")
         graph = display_ops.finalize(graph, ctx.query_gene_curies)
         ctx.display.replace(graph)
         return {
@@ -618,6 +715,53 @@ class ShowResultTool:
         return {"result_id": args["result_id"], "merged": merge, "nodes_after": graph.number_of_nodes()}
 
 
+class ClusterGraphTool:
+    name = "cluster_graph"
+    parallel_safe = False  # writes the display (tags nodes with their cluster for recoloring)
+    description = (
+        "Summarize the STRUCTURE of a large result so you can describe it accurately instead of "
+        "guessing from the top edges. Returns a topology-aware digest: communities (for a real "
+        "interaction mesh, each with size + top members + dominant category), or -- when the graph is "
+        "hub-dominated (a star around one gene/disease) -- node-category and edge-predicate facets "
+        "instead, plus connected components and overall counts. Also recolors the on-screen graph by "
+        "cluster. Call this after a finder returns a large result (hundreds+ of nodes/edges); base "
+        "your summary on what it returns and do not invent modules it did not find. Optional result_id "
+        "selects which result (defaults to the current graph)."
+    )
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "result_id": {
+                "type": "string",
+                "description": "A result_id from a previous finder; defaults to the current graph.",
+            }
+        },
+    }
+
+    def run(self, args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
+        rid = args.get("result_id")
+        if rid:
+            result = ctx.stash.get(rid)
+            if result is None:
+                raise ValueError(f"unknown result_id {rid!r}")
+            graph = tct_result_to_nx(result, ctx.query_gene_curies, ctx.curie_to_symbol, ctx.disease_curie)
+        else:
+            graph = _working_display_graph(ctx)
+        if graph is None or graph.number_of_nodes() == 0:
+            raise ValueError("no graph to cluster yet; run a finder tool first")
+
+        digest, node_cluster = summarize_graph(
+            graph, ctx.query_gene_curies, ctx.disease_curie, ctx.curie_to_symbol
+        )
+        # Tag nodes with their cluster so network_viz can recolor by community/facet.
+        for node, cid in node_cluster.items():
+            if node in graph:
+                graph.nodes[node]["cluster"] = cid
+        graph = display_ops.finalize(graph, ctx.query_gene_curies)
+        ctx.display.replace(graph)
+        return digest
+
+
 # --------------------------------------------------------------------------------------
 # Registry
 # --------------------------------------------------------------------------------------
@@ -690,5 +834,6 @@ def default_registry() -> ToolRegistry:
             FilterGraphTool(),
             AddDiseaseNodeTool(),
             ShowResultTool(),
+            ClusterGraphTool(),
         ]
     )

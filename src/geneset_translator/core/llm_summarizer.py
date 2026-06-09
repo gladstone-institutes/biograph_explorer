@@ -124,6 +124,9 @@ class LLMSummarizer:
         self.citation_cache_dir = cache_dir / "citation_graphs"
         self.summary_cache_dir.mkdir(parents=True, exist_ok=True)
         self.citation_cache_dir.mkdir(parents=True, exist_ok=True)
+        # The actual usage of the most recent generate call, so callers (e.g. the chat page) can
+        # add it to their session CostTracker. None until a non-cached generation runs.
+        self.last_usage: Any = None
 
     def generate_category_summary(
         self,
@@ -1099,6 +1102,7 @@ class LLMSummarizer:
 
             # Log actual token usage from API response
             if hasattr(response, 'usage'):
+                self.last_usage = response.usage  # so callers can bill it to their session CostTracker
                 actual_input = response.usage.input_tokens
                 actual_output = response.usage.output_tokens
                 in_price, out_price = get_model_pricing(self.model)

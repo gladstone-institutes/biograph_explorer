@@ -9,8 +9,40 @@ Phase 2 Status: Stub created
 TODO: Implement formatters
 """
 
+import re
 from typing import Dict, List, Any, Optional
 import networkx as nx
+
+# Unicode emoji / pictograph blocks only. Deliberately EXCLUDES Greek and other scientific
+# letters (alpha, beta, mu, ...) and ordinary punctuation so gene/chemical text is preserved.
+_EMOJI_RE = re.compile(
+    "["
+    "\U0001F300-\U0001FAFF"  # symbols & pictographs, emoticons, supplemental, extended-A
+    "\U0001F000-\U0001F0FF"  # mahjong / dominoes / playing cards
+    "\U0001F1E6-\U0001F1FF"  # regional indicator (flags)
+    "\U00002600-\U000027BF"  # misc symbols + dingbats (warning, check, cross, ...)
+    "\U00002B00-\U00002BFF"  # misc symbols and arrows (stars, etc.)
+    "\U0000FE00-\U0000FE0F"  # variation selectors (emoji presentation)
+    "]+",
+    flags=re.UNICODE,
+)
+
+
+def strip_emoji(text: str) -> str:
+    """Remove emoji / pictographic symbols from text, preserving scientific letters and markdown.
+
+    Scoped to emoji unicode blocks so Greek letters (used in gene/protein names) and normal
+    punctuation survive. Collapses any whitespace left by a removed emoji.
+    """
+    if not text:
+        return text
+    cleaned = _EMOJI_RE.sub("", text)
+    # Tidy up spaces left dangling by removed symbols (e.g. "drug X" stays single-spaced; a removed
+    # trailing emoji does not leave a trailing space). Per-line rstrip preserves markdown structure.
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r" +([.,;:!?])", r"\1", cleaned)
+    cleaned = "\n".join(line.rstrip() for line in cleaned.split("\n"))
+    return cleaned
 
 
 def format_node_label(

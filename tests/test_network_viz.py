@@ -4,7 +4,43 @@ import networkx as nx
 from geneset_translator.ui.network_viz import (
     prepare_cytoscape_elements,
     create_edge_styles,
+    cluster_color_map,
 )
+
+
+def test_cluster_color_map_distinct_stable_and_hub_neutral():
+    """Each cluster id gets a distinct, deterministic color; the 'hubs' group is the fixed neutral."""
+    m1 = cluster_color_map(["C2", "C1", "hubs"])
+    m2 = cluster_color_map(["hubs", "C1", "C2"])  # order-independent
+    assert m1 == m2
+    assert m1["C1"] != m1["C2"]  # distinct
+    assert m1["hubs"] == "#444444"  # fixed neutral for hubs
+    assert all(v.startswith("#") for v in m1.values())
+
+
+def test_cluster_color_map_uses_canonical_colors_for_biolink_categories():
+    """When clusters are biolink categories (hub-dominated facets), use the standard category palette."""
+    from geneset_translator.ui.network_viz import CATEGORY_COLORS, CLUSTER_PALETTE
+
+    m = cluster_color_map(["Gene", "Protein", "ChemicalEntity", "C1"])
+    assert m["Gene"] == CATEGORY_COLORS["Gene"]
+    assert m["Protein"] == CATEGORY_COLORS["Protein"]
+    assert m["ChemicalEntity"] == CATEGORY_COLORS["ChemicalEntity"]
+    assert m["C1"] in CLUSTER_PALETTE  # community-style ids still use the distinct cluster palette
+
+
+def test_prepare_elements_colors_by_cluster_when_present():
+    """When nodes carry a 'cluster' attr, the NodeStyle-matching 'label' becomes the cluster id and the
+    cluster is exposed for the infopanel; without it, label stays the category."""
+    g = nx.MultiDiGraph()
+    g.add_node("NCBIGene:1", category="Gene", label="g1", cluster="C1")
+    g.add_node("NCBIGene:2", category="Gene", label="g2", cluster="C2")
+    g.add_edge("NCBIGene:1", "NCBIGene:2", key=0, predicate="biolink:interacts_with")
+    elements = prepare_cytoscape_elements(g, query_genes=["NCBIGene:1"])
+    by_id = {n["data"]["id"]: n["data"] for n in elements["nodes"]}
+    assert by_id["NCBIGene:1"]["label"] == "C1"  # colored by cluster
+    assert by_id["NCBIGene:1"]["cluster"] == "C1"  # visible in infopanel
+    assert by_id["NCBIGene:1"]["category"] == "Gene"  # category retained for display
 
 
 def test_edge_elements_stable_across_width_changes():

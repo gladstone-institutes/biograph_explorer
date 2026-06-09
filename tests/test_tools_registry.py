@@ -69,6 +69,7 @@ def test_registry_schemas_cover_all_tools():
         "filter_graph",
         "add_disease_node",
         "show_result",
+        "cluster_graph",
     }
     for schema in reg.schemas():
         assert "description" in schema and "input_schema" in schema
@@ -81,8 +82,43 @@ def test_display_tools_are_not_parallel_safe_finders_are():
     # new read-only / network tools stay parallel-safe (and cacheable)
     assert reg.is_parallel_safe("node_metadata") is True
     assert reg.is_parallel_safe("data_sources") is True
-    for name in ("filter_graph", "add_disease_node", "show_result"):
+    for name in ("filter_graph", "add_disease_node", "show_result", "cluster_graph"):
         assert reg.is_parallel_safe(name) is False
+
+
+def test_cluster_graph_returns_digest_and_recolors_display():
+    """cluster_graph summarizes the working graph and tags display nodes with their cluster so the
+    viz can recolor. On a star (disease hub + gene leaves) it must report a hub-dominated topology
+    with facets, not invent communities."""
+    reg = T.default_registry()
+    ctx = _ctx(query_genes=[])
+    ctx.disease_curie = "MONDO:1"
+
+    import networkx as nx
+
+    g = nx.MultiDiGraph()
+    g.add_node("MONDO:1", category="Disease", label="d")
+    for i in range(30):
+        n = f"NCBIGene:{i}"
+        g.add_node(n, category="Gene", label=n)
+        g.add_edge("MONDO:1", n, key=f"e{i}", predicate="biolink:associated_with")
+    ctx.display.replace(g)
+
+    result, is_error = reg.dispatch("cluster_graph", {}, ctx)
+    assert is_error is False
+    assert result["topology"] == "hub_dominated"
+    assert "facet" in result["method"]
+    assert result["category_facets"].get("Gene") == 30
+    assert result["notes"]  # explains why community detection was skipped
+    # display nodes are tagged with a cluster for recoloring
+    snap = ctx.display.snapshot()
+    assert any("cluster" in snap.nodes[n] for n in snap.nodes)
+
+
+def test_cluster_graph_needs_a_graph():
+    reg = T.default_registry()
+    result, is_error = reg.dispatch("cluster_graph", {}, _ctx())
+    assert is_error is True and "no graph" in result["error"]
 
 
 # --------------------------------------------------------------------------------------
@@ -216,6 +252,53 @@ def test_filter_graph_requires_a_criterion():
     assert is_error is True and "specify at least one" in result["error"]
 
 
+def _seed_clustered_display(ctx):
+    """Two clusters (C1, C2), each with a clear intra-cluster hub plus low-degree members."""
+    import networkx as nx
+
+    g = nx.MultiDiGraph()
+    # cluster C1: hub NCBIGene:1 connects to 1a,1b,1c; 1d is a leaf
+    # cluster C2: hub CHEBI:H connects to H1,H2; H3 is a leaf
+    nodes = {
+        "NCBIGene:1": ("Gene", "C1"), "1a": ("Gene", "C1"), "1b": ("Gene", "C1"),
+        "1c": ("Gene", "C1"), "1d": ("Gene", "C1"),
+        "CHEBI:H": ("ChemicalEntity", "C2"), "H1": ("ChemicalEntity", "C2"),
+        "H2": ("ChemicalEntity", "C2"), "H3": ("ChemicalEntity", "C2"),
+    }
+    for n, (cat, cid) in nodes.items():
+        g.add_node(n, category=cat, label=n, curie=n, cluster=cid, is_query_gene=n == "NCBIGene:1")
+    for t in ("1a", "1b", "1c", "1d"):
+        g.add_edge("NCBIGene:1", t, key=f"e_{t}", predicate="biolink:interacts_with")
+    g.add_edge("1a", "1b", key="e_1a1b", predicate="biolink:interacts_with")  # 1a slightly higher degree
+    for t in ("H1", "H2", "H3"):
+        g.add_edge("CHEBI:H", t, key=f"e_{t}", predicate="biolink:affects")
+    g.add_edge("H1", "H2", key="e_h1h2", predicate="biolink:affects")
+    ctx.display.replace(g)
+
+
+def test_filter_graph_top_per_cluster_is_balanced_across_clusters():
+    reg = T.default_registry()
+    ctx = _ctx(query_genes=["NCBIGene:1"])
+    _seed_clustered_display(ctx)
+    result, is_error = reg.dispatch("filter_graph", {"top_per_cluster": 2}, ctx)
+    assert is_error is False
+    kept = set(ctx.display.snapshot().nodes)
+    c1 = {n for n in kept if n in {"NCBIGene:1", "1a", "1b", "1c", "1d"}}
+    c2 = {n for n in kept if n in {"CHEBI:H", "H1", "H2", "H3"}}
+    # both clusters represented (not gene-dominated), and the per-cluster hubs are kept
+    assert "NCBIGene:1" in c1 and "CHEBI:H" in c2
+    assert len(c1) >= 2 and len(c2) >= 2
+    assert "top_2_per_cluster" in result["applied"]
+
+
+def test_filter_graph_top_per_cluster_needs_clusters_first():
+    reg = T.default_registry()
+    ctx = _ctx(query_genes=["NCBIGene:1"])
+    _seed_display(ctx)  # plain display, no 'cluster' attrs
+    result, is_error = reg.dispatch("filter_graph", {"top_per_cluster": 3}, ctx)
+    assert is_error is True and "cluster_graph first" in result["error"]
+
+
 def test_show_result_sets_display_from_stash():
     reg = T.default_registry()
     ctx = _ctx(query_genes=["NCBIGene:1"])
@@ -347,3 +430,79 @@ def test_path_between_defaults_intermediates():
     assert is_error is False
     assert result["n_paths"] == 2
     assert result["node1_id"] == "NCBIGene:596"
+
+
+# --------------------------------------------------------------------------------------
+# Evidence enrichment (publication links + primary source on finder rows)
+# --------------------------------------------------------------------------------------
+def test_edge_publications_from_direct_key_and_attributes():
+    # synthetic/recorded edge: publications live directly on the edge
+    assert T._edge_publications({"publications": ["PMID:28644114", "28644114", "PMID:28644114"]}) == [
+        "PMID:28644114"
+    ]  # normalized + de-duplicated
+    assert T._edge_publications({}) == []
+
+
+def test_edge_primary_source_from_sources_and_synthetic():
+    trapi = {"sources": [
+        {"resource_id": "infores:aggA", "resource_role": "aggregator_knowledge_source"},
+        {"resource_id": "infores:drugbank", "resource_role": "primary_knowledge_source"},
+    ]}
+    assert T._edge_primary_source(trapi) == "infores:drugbank"
+    assert T._edge_primary_source({"primary_sources": ["infores:chembl"]}) == "infores:chembl"
+    assert T._edge_primary_source({}) is None
+
+
+def test_gene_neighborhood_attaches_publications_to_top_edges():
+    """A neighborhood result with a knowledge graph carrying publications -> top_edges carry citable
+    publication links + primary source for the input->output edge."""
+    import types
+
+    edge = {
+        "subject": "NCBIGene:2322",
+        "object": "CHEBI:1",
+        "predicate": "biolink:affects",
+        "publications": ["PMID:28644114"],
+        "primary_sources": ["infores:drugbank"],
+    }
+    nb = types.SimpleNamespace(
+        input_node_id="NCBIGene:2322",
+        ranked=pd.DataFrame([{"output_node": "CHEBI:1", "Name": "drug"}]),
+        knowledge_graph=_FakeKG({"e0": edge}),
+    )
+
+    class _GW(_FakeGateway):
+        def neighborhood(self, gene_curie, target_categories=None):
+            return nb
+
+    reg = T.default_registry()
+    ctx = T.ToolContext(tct=_GW(), stash=DictResultStash())
+    result, is_error = reg.dispatch("gene_neighborhood", {"gene_curie": "NCBIGene:2322"}, ctx)
+    assert is_error is False
+    row = result["top_edges"][0]
+    assert row["publications"] == ["PMID:28644114"]
+    assert row["primary_source"] == "infores:drugbank"
+
+
+def test_gene_network_attaches_publications_to_top_edges():
+    edge = {
+        "subject": "NCBIGene:1",
+        "object": "NCBIGene:2",
+        "predicate": "biolink:interacts_with",
+        "publications": ["PMID:20705237"],
+        "sources": [{"resource_id": "infores:biogrid", "resource_role": "primary_knowledge_source"}],
+    }
+
+    class _GW(_FakeGateway):
+        def gene_network(self, curies):
+            return _FakeKG({"e0": edge})
+
+    reg = T.default_registry()
+    ctx = T.ToolContext(tct=_GW(), stash=DictResultStash())
+    result, is_error = reg.dispatch(
+        "gene_network", {"gene_curies": ["NCBIGene:1", "NCBIGene:2"]}, ctx
+    )
+    assert is_error is False
+    row = result["top_edges"][0]
+    assert row["publications"] == ["PMID:20705237"]
+    assert row["primary_source"] == "infores:biogrid"

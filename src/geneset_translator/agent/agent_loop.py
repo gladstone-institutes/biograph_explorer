@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Callable, List, Optional, Protocol
@@ -191,6 +192,7 @@ class AgentLoop:
         cost_tracker: CostTracker,
         cost_cap_usd: float,
         status_cb: StatusCb = None,
+        should_stop: Optional[Callable[[], bool]] = None,
     ) -> AgentTurnResult:
         iterations = 0
         stop_note: Optional[str] = None
@@ -202,6 +204,12 @@ class AgentLoop:
         )
 
         while True:
+            if should_stop and should_stop():
+                # Stop before the next model call; messages already end with tool_results / the user
+                # turn, so the conversation stays API-valid and resumable.
+                stop_note = "Stopped at your request."
+                logger.info(stop_note)
+                break
             if cost_tracker.total_usd >= cost_cap_usd:
                 stop_note = (
                     f"Stopped: hit the ${cost_cap_usd:.2f} spend cap "
@@ -256,6 +264,28 @@ class AgentLoop:
             for tu in tool_uses:
                 logger.info("  tool call: %s(%s)", tu.name, _short_args(tu.input))
 
+            if should_stop and should_stop():
+                # Stop before running the (possibly slow) batch the model just requested. Answer each
+                # pending tool_use with a synthetic "stopped" result so the assistant tool_use is
+                # satisfied and the kept conversation remains API-valid.
+                stop_note = "Stopped at your request before running the requested tools."
+                logger.info(stop_note)
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": tu.id,
+                                "content": json.dumps({"stopped": True}),
+                                "is_error": False,
+                            }
+                            for tu in tool_uses
+                        ],
+                    }
+                )
+                break
+
             # Run concurrently only when EVERY tool in the step is parallel_safe (independent
             # network I/O). If any tool mutates shared display state (parallel_safe=False), run the
             # whole step sequentially in input order so the edits are deterministic.
@@ -269,20 +299,25 @@ class AgentLoop:
                 else:
                     status_cb(f"Running {len(tool_uses)} tools...")
 
+            def _timed_dispatch(tu: Any):
+                t0 = time.time()
+                result, is_error = self.registry.dispatch(tu.name, tu.input, ctx)
+                return result, is_error, time.time() - t0
+
             if concurrent:
                 with ThreadPoolExecutor(max_workers=min(len(tool_uses), self.max_tool_workers)) as ex:
-                    outcomes = list(
-                        ex.map(lambda tu: self.registry.dispatch(tu.name, tu.input, ctx), tool_uses)
-                    )
+                    outcomes = list(ex.map(_timed_dispatch, tool_uses))
             else:
-                outcomes = [self.registry.dispatch(tu.name, tu.input, ctx) for tu in tool_uses]
+                outcomes = [_timed_dispatch(tu) for tu in tool_uses]
 
             tool_results = []
-            for tu, (result, is_error) in zip(tool_uses, outcomes):
+            for tu, (result, is_error, dur) in zip(tool_uses, outcomes):
                 summary = _summarize_result(result, is_error)
-                logger.info("  tool result: %s -> %s", tu.name, summary)
+                logger.info("  tool result: %s -> %s in %.1fs", tu.name, summary, dur)
+                if dur > 30:
+                    logger.warning("slow tool: %s took %.1fs", tu.name, dur)
                 if status_cb:
-                    status_cb(f"  {'X' if is_error else 'OK'} {tu.name}: {summary}")
+                    status_cb(f"  {'X' if is_error else 'OK'} {tu.name}: {summary} ({dur:.1f}s)")
                 tool_results.append(
                     {
                         "type": "tool_result",
@@ -293,7 +328,7 @@ class AgentLoop:
                 )
             # Deterministic "latest" render target: last result (input order) that produced one,
             # since concurrent dispatch makes the per-call latest_result_id race.
-            for tu, (result, is_error) in reversed(list(zip(tool_uses, outcomes))):
+            for tu, (result, is_error, _dur) in reversed(list(zip(tool_uses, outcomes))):
                 if not is_error and isinstance(result, dict) and result.get("result_id"):
                     ctx.latest_result_id = result["result_id"]
                     break
@@ -343,8 +378,12 @@ def build_system_prompt(
         "DISEASE or DRUG named in the question (not a gene), resolve it with biolink_type "
         "('biolink:Disease' or 'biolink:Drug') so it is not mis-matched to a same-named gene.\n"
         "2. Choose the SMALLEST set of finder tools that answers the question: gene_neighborhood "
-        "for 'what targets/relates to gene X', path_between for 'how are X and Y connected', "
-        "gene_network for 'how do these genes interact with each other'. gene_neighborhood works on "
+        "for 'what targets/relates to gene X', gene_network for 'how do these genes interact with each "
+        "other'. Use path_between WHENEVER the question is about the relationship between TWO specific "
+        "named entities -- 'how is X connected to Y', 'what links gene X to disease/drug Y', 'what "
+        "intermediates connect them', or any mechanism question between two entities -- rather than "
+        "running separate neighborhoods and inferring the link yourself (e.g. 'what connects FLT3 and "
+        "BCL2' -> path_between, NOT two neighborhoods). gene_neighborhood works on "
         "ANY resolved CURIE, not just genes: for 'what genes are associated with disease X' pass the "
         "disease CURIE with target_categories ['biolink:Gene']; for 'what does drug X target' pass "
         "the drug CURIE. To find the 'most connected' genes, read gene_network's top_hubs (ranked by "
@@ -354,23 +393,55 @@ def build_system_prompt(
         "turn.\n"
         "4. Call edge_evidence when the user asks for evidence/proof/publications for a specific "
         "relationship. Call cell_type_expression for expression / cell-type / tissue / immune "
-        "specificity (pass scope to narrow it). Call node_metadata for what a gene DOES (GO terms / "
-        "biological process / function / gene type / aliases) -- it is standalone and needs no finder "
-        "result first. Call data_sources for 'where does this come from / which sources / how "
-        "reliable', passing an existing result_id.\n"
+        "specificity (pass scope to narrow it) -- and call it BEFORE making any cell-type or tissue "
+        "claim, including when the user says the gene set came from a single-cell / scRNA experiment "
+        "or asks which cell types express the genes; do not assert cell-type specificity the tools did "
+        "not return. Call node_metadata for what a gene DOES (GO terms / biological process / function "
+        "/ gene type / aliases) -- it is standalone and needs no finder result first. Call data_sources "
+        "for 'where does this come from / which sources / how reliable', passing an existing result_id.\n"
         "5. To CHANGE WHAT THE GRAPH SHOWS, use the display tools, which edit the on-screen graph "
         "in memory (no new query): filter_graph (trim / 'show only' / 'focus on' / 'genes connected "
         "to X' / 'most connected' via top_n), add_disease_node (add the disease linked to the shown "
         "genes), show_result (bring back or merge an earlier result_id). Prefer these over running a "
-        "new finder when the user is asking to re-shape the current picture.\n"
+        "new finder when the user is asking to re-shape the current picture. For a balanced 'top nodes "
+        "of each cluster' view, FIRST cluster_graph, then call filter_graph with top_per_cluster (NOT "
+        "top_n: top_n keeps the highest-degree nodes overall and is dominated by the largest cluster on "
+        "hub-dominated graphs).\n"
+        "5b. When a finder returns a LARGE result (n_results / edge_count / n_paths in the hundreds or "
+        "more -- far more than the top_edges you can see), call cluster_graph before summarizing and "
+        "base your summary on its structure instead of generalizing from the top slice. In your answer: "
+        "(a) STATE the clustering method and topology it reports (e.g. 'louvain communities' vs "
+        "'category/predicate facets, because the network is hub-dominated'); (b) describe EVERY cluster, "
+        "not just the gene cluster -- for each give its entity type, size, a few representative members "
+        "BY NAME (use the names cluster_graph returns; do not reduce a cluster to bare CURIEs or to "
+        "'protein-level equivalents'), and how it connects (its dominant_predicates); (c) note the "
+        "overall entity-type composition (category_facets: genes vs proteins vs chemicals vs concepts). "
+        "cluster_graph is topology-aware: for a hub-dominated / star graph it returns node-category and "
+        "edge-predicate facets instead of communities -- report what it returns and do not invent "
+        "modules it did not find. It also recolors the graph by cluster: when the clusters ARE biolink "
+        "categories (the facet case), the graph uses the standard category palette (each biolink type "
+        "has a fixed color shown in the legend), so refer to each cluster by its category so the user "
+        "can match your description to the colored graph.\n"
         "6. Report ONLY entities, identifiers, and relationships that appear in the tool results. Do "
         "NOT add drug indications, mechanisms of action, clinical-trial claims, publication IDs, or "
         "other specifics that are not in those results, and never guess the disease name. Use the "
         "exact publications/sources the tools return; if the user asks for detail the tools did not "
         "provide, say it is not in the results rather than inventing it.\n"
-        "7. Be concise and efficient: there is a hard spend cap, so avoid redundant calls. If a "
+        "7. CITE the evidence. For each specific relationship claim, cite the supporting publication "
+        "link(s) and/or the primary knowledge source carried on that edge in the tool result "
+        "(publications come back as PubMed links); call edge_evidence when a claim needs stronger "
+        "support than the finder row carries. End a substantive answer with a 'Sources:' list of the "
+        "publication links you actually used.\n"
+        "8. DELINEATE provenance. State facts taken from tool results plainly, with their citation. If "
+        "you add interpretation or general background that is NOT in the tool results, mark it clearly "
+        "(e.g. begin the sentence with 'Interpretation:' or '(general knowledge, not from the "
+        "Translator data)'). Never present an uncited specific claim as if it came from the data.\n"
+        "9. Use plain text only. Do NOT use emojis or decorative unicode symbols (write 'Yes', not a "
+        "check mark).\n"
+        "10. Be concise and efficient: there is a hard spend cap, so avoid redundant calls. If a "
         "tool returns an error, read it, fix your arguments (often: resolve the CURIE first), and "
         "retry once.\n"
-        "8. The current graph is rendered for the user automatically (your latest finder result, or "
-        "whatever the display tools last set); refer to it rather than dumping every row."
+        "11. The current graph is rendered for the user automatically (your latest finder result, or "
+        "whatever the display tools last set); parallel edges between the same two nodes are collapsed "
+        "into one link by default, so describe relationship counts rather than dumping every row."
     )

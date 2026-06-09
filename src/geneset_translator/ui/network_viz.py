@@ -44,6 +44,44 @@ CATEGORY_COLORS = {
     "Other": "#666666",          # Gray
 }
 
+# Distinct, color-blind-friendly palette for coloring nodes by cluster (cluster_graph tool).
+# Distinct from CATEGORY_COLORS so a cluster-colored graph reads differently from a category one.
+CLUSTER_PALETTE = [
+    "#4E79A7", "#F28E2B", "#59A14F", "#E15759", "#B07AA1", "#76B7B2",
+    "#EDC948", "#FF9DA7", "#9C755F", "#8CD17D", "#86BCB6", "#D37295",
+]
+CLUSTER_HUB_COLOR = "#444444"   # the always-present "hubs" group renders neutral/dark
+CLUSTER_FALLBACK_COLOR = "#999999"
+
+
+def cluster_color_map(cluster_ids) -> dict:
+    """Stable, distinct hex color per cluster id. When a cluster id is a biolink CATEGORY (the
+    hub-dominated case where cluster_graph facets by node type, e.g. 'Gene'/'Protein'/'ChemicalEntity'),
+    use the canonical CATEGORY_COLORS so the coloring matches the rest of the app's category palette and
+    the legend. Community clusters (C1, C2, ...) get distinct CLUSTER_PALETTE colors; 'hubs' is neutral."""
+    ids = sorted({str(c) for c in cluster_ids if c is not None})
+    mapping: dict = {}
+    i = 0
+    for cid in ids:
+        if cid == "hubs":
+            mapping[cid] = CLUSTER_HUB_COLOR
+        elif cid in CATEGORY_COLORS:
+            mapping[cid] = CATEGORY_COLORS[cid]
+        else:
+            mapping[cid] = CLUSTER_PALETTE[i % len(CLUSTER_PALETTE)]
+            i += 1
+    return mapping
+
+
+def _graph_cluster_ids(graph) -> list:
+    """Cluster ids present on nodes (empty if the graph has not been clustered)."""
+    seen = []
+    for node in graph.nodes():
+        cid = graph.nodes[node].get("cluster")
+        if cid is not None and cid not in seen:
+            seen.append(cid)
+    return seen
+
 # Edge color constants
 # Teal from Tableau colorblind-friendly palette (for publication highlighting)
 HIGHLIGHT_EDGE_COLOR = "#17BECF"
@@ -270,17 +308,25 @@ def prepare_cytoscape_elements(
     else:
         normalized_metrics = {node: 0.5 for node in graph.nodes()}
 
+    # When the graph has been clustered (cluster_graph tool), color by cluster instead of category:
+    # NodeStyle matches on the "label" data attr, so set label to the cluster id in that mode.
+    cluster_mode = bool(_graph_cluster_ids(graph))
+
     # Enrich nodes with custom attributes
     # Attributes prefixed with '_' are internal styling attributes (hidden from infopanel by default)
     for node_element in elements["nodes"]:
         node_id = node_element["data"]["id"]
         node_attrs = graph.nodes[node_id]
 
-        # Add category as label (for NodeStyle matching) - internal, hidden from user
+        # Add category for user display (kept even in cluster mode)
         category = node_attrs.get("category", "Other")
-        node_element["data"]["label"] = category  # Used by NodeStyle for matching
-        # Also add as 'category' for user display
         node_element["data"]["category"] = category
+        if cluster_mode:
+            cluster_id = str(node_attrs.get("cluster", "other"))
+            node_element["data"]["label"] = cluster_id  # NodeStyle matches on label -> color by cluster
+            node_element["data"]["cluster"] = cluster_id  # visible in the infopanel
+        else:
+            node_element["data"]["label"] = category  # Used by NodeStyle for matching
 
         # Add display name (for caption)
         original_symbol = node_attrs.get("original_symbol", "")
@@ -599,11 +645,18 @@ def create_node_styles(
     if not STREAMLIT_CYTOSCAPE_AVAILABLE:
         raise ImportError("streamlit-cytoscape not installed. Run: pip install streamlit-cytoscape")
 
-    # Extract unique categories
-    categories = set()
-    for node in graph.nodes():
-        category = graph.nodes[node].get("category", "Other")
-        categories.add(category)
+    # When clustered, color by cluster id (one NodeStyle per cluster); else by biolink category.
+    cluster_ids = _graph_cluster_ids(graph)
+    if cluster_ids:
+        color_for = cluster_color_map(cluster_ids)
+        categories = {str(c) for c in cluster_ids}
+        icon_for = {}
+    else:
+        categories = set()
+        for node in graph.nodes():
+            categories.add(graph.nodes[node].get("category", "Other"))
+        color_for = {c: CATEGORY_COLORS.get(c, CATEGORY_COLORS["Other"]) for c in categories}
+        icon_for = {c: CATEGORY_ICONS.get(c) for c in categories}
 
     # Calculate size range based on base_node_size and metric sizing
     if use_metric_sizing:
@@ -623,8 +676,8 @@ def create_node_styles(
     # Use mapData to calculate size from _size_factor (keeps elements stable)
     node_styles = []
     for category in sorted(categories):
-        color = CATEGORY_COLORS.get(category, CATEGORY_COLORS["Other"])
-        icon = CATEGORY_ICONS.get(category)
+        color = color_for.get(category, CATEGORY_COLORS["Other"])
+        icon = icon_for.get(category)
 
         # Use "name" as caption (displays gene symbol or node label)
         # mapData calculates size from _size_factor (0-1) * size range

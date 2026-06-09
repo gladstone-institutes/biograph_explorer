@@ -97,6 +97,25 @@ def trim_to_top_degree(
     return nx.MultiDiGraph(graph.subgraph(keep).copy())
 
 
+def trim_to_top_per_cluster(
+    graph: Graph, k: int, always_keep: Optional[Iterable[str]] = None
+) -> nx.MultiDiGraph:
+    """Keep the ``k`` highest-degree nodes WITHIN each cluster (node attr ``cluster``, set by the
+    cluster_graph tool) plus ``always_keep`` -- a balanced per-cluster view, unlike trim_to_top_degree
+    which keeps the highest-degree nodes overall (dominated by the largest cluster on hub graphs)."""
+    always = set(always_keep or [])
+    by_cluster: dict = {}
+    for node, data in graph.nodes(data=True):
+        cid = data.get("cluster")
+        if cid is not None:
+            by_cluster.setdefault(cid, []).append(node)
+    keep = always & set(graph.nodes)
+    for nodes in by_cluster.values():
+        ranked = sorted(nodes, key=lambda n: graph.degree(n), reverse=True)
+        keep.update(ranked[: max(k, 0)])
+    return nx.MultiDiGraph(graph.subgraph(keep).copy())
+
+
 def filter_by_category(
     graph: Graph, category: str, always_keep: Optional[Iterable[str]] = None
 ) -> nx.MultiDiGraph:
@@ -149,9 +168,22 @@ def add_disease_node(
     return out
 
 
-def finalize(graph: Graph, query_gene_curies: Iterable[str]) -> nx.MultiDiGraph:
-    """Recompute gene_frequency and backfill category/is_query_gene so the result renders cleanly."""
+def drop_orphans(graph: Graph) -> nx.MultiDiGraph:
+    """Return a copy with orphan nodes removed -- nodes with no edge to any OTHER node (degree 0 or
+    self-loops only). Floating dots carry no information and clutter the view. Never mutates the input."""
     out = nx.MultiDiGraph(graph)
+    orphans = [
+        n for n in out.nodes
+        if not ((set(out.predecessors(n)) | set(out.successors(n))) - {n})
+    ]
+    out.remove_nodes_from(orphans)
+    return out
+
+
+def finalize(graph: Graph, query_gene_curies: Iterable[str]) -> nx.MultiDiGraph:
+    """Recompute gene_frequency and backfill category/is_query_gene so the result renders cleanly.
+    Orphan nodes (no edge to any other node) are dropped so the agent never displays floating dots."""
+    out = drop_orphans(graph)
     query_set = set(query_gene_curies)
     for node, data in out.nodes(data=True):
         data.setdefault("curie", node)

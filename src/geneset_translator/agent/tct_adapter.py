@@ -47,7 +47,11 @@ def load_resources():
     """Build the (expensive) TranslatorResources once. Wrap with @st.cache_resource at the UI layer."""
     if not TCT_AVAILABLE:
         raise ImportError("TCT library not installed.")
-    return TranslatorResources.load()
+    logger.info("TCT resources: loading (one-time)...")
+    t0 = time.time()
+    resources = TranslatorResources.load()
+    logger.info("TCT resources: loaded in %.1fs", time.time() - t0)
+    return resources
 
 
 # --------------------------------------------------------------------------------------

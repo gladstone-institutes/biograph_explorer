@@ -30,7 +30,7 @@ def run_case(
     *,
     gateway: Any = None,
     max_iterations: int = 8,
-    cost_cap: float = 2.0,
+    cost_cap: float = 1.0,
 ) -> Dict[str, Any]:
     """Execute one case; capture the ordered tool calls, final answer, cost."""
     from geneset_translator.agent.agent_loop import build_system_prompt

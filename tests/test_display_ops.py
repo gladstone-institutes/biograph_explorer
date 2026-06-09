@@ -87,3 +87,23 @@ def test_finalize_sets_gene_frequency_and_renders():
 
     elements = prepare_cytoscape_elements(out, ["NCBIGene:1", "NCBIGene:2", "NCBIGene:3"])
     assert len(elements["nodes"]) == 5
+
+
+# -- orphan removal (never display floating dots) --------------------------------------
+def test_drop_orphans_removes_isolated_and_selfloop_only_nodes():
+    g = nx.MultiDiGraph()
+    g.add_edge("A", "B", key="e0", predicate="x")          # connected pair -> kept
+    g.add_node("ISO")                                       # degree 0 -> orphan
+    g.add_edge("SELF", "SELF", key="e1", predicate="x")     # only a self-loop -> orphan
+    out = do.drop_orphans(g)
+    assert set(out.nodes) == {"A", "B"}
+    assert "ISO" in g.nodes  # input is never mutated (returns a copy)
+
+
+def test_finalize_drops_orphans_including_disconnected_query_genes():
+    g = nx.MultiDiGraph()
+    g.add_edge("NCBIGene:1", "CHEBI:D", key="e0", predicate="biolink:affects")
+    g.add_node("NCBIGene:9")  # a query gene with no connections in this result
+    out = do.finalize(g, query_gene_curies=["NCBIGene:1", "NCBIGene:9"])
+    assert "NCBIGene:9" not in out.nodes          # no exemption: orphans always dropped
+    assert {"NCBIGene:1", "CHEBI:D"} <= set(out.nodes)

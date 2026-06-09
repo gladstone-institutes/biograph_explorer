@@ -683,7 +683,7 @@ st.sidebar.checkbox(
 import os
 _api_key_present = bool(os.environ.get('ANTHROPIC_API_KEY'))
 if _api_key_present:
-    st.sidebar.success("✅ LLM Summary feature enabled")
+    st.sidebar.success("LLM Summary feature enabled")
 else:
     st.sidebar.info("ℹ️ Add ANTHROPIC_API_KEY to .env for LLM summaries")
 
