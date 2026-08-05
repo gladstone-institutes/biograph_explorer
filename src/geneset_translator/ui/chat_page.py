@@ -28,7 +28,7 @@ from geneset_translator.agent.agent_loop import (
     build_system_prompt,
 )
 from geneset_translator.agent.cost import CostTracker
-from geneset_translator.agent.display_ops import DisplayGraph, drop_orphans
+from geneset_translator.agent.display_ops import DisplayGraph, drop_orphans, finalize
 from geneset_translator.agent.script_generator import generate_reproduction_script
 from geneset_translator.agent.tct_adapter import (
     DictResultStash,
@@ -537,7 +537,10 @@ def _render_graph_panel() -> None:
 
     n_nodes = len(viz["elements"]["nodes"])
     n_edges = len(viz["elements"]["edges"])
-    st.caption(f"Showing {n_nodes} nodes / {n_edges} edges (capped at {ss.chat_max_nodes}).")
+    st.caption(
+        f"Showing {n_nodes} nodes / {n_edges} edges (capped at {ss.chat_max_nodes}). "
+        "Select a node and use its Remove action to declutter the view."
+    )
     _render_cluster_legend(viz["elements"]["nodes"])
     key = _graph_component_key(
         ss.chat_latest_result_id, ss.chat_layout, ss.chat_max_nodes, display_version, collapse,
@@ -550,12 +553,38 @@ def _render_graph_panel() -> None:
         edge_styles=viz["edge_styles"],
         key=key,
         hide_underscore_attrs=True,
+        node_actions=["remove"],  # built-in per-node Remove so users can delete cluttering nodes
         edge_actions=["collapse", "expand"],
         collapse_parallel_edges=collapse,
         meta_edge_style=_meta_edge_style(edge_width),  # so the edge-width control reaches collapsed edges
         infopanel_actions=[InfopanelAction("ai_summary", "AI Summary", icon="science", spinner=True)],
     )
+    _handle_node_removal(key, graph)
     _handle_ai_summary(key, graph)
+
+
+def _handle_node_removal(component_key: str, graph: Any) -> None:
+    """Persist the component's built-in 'remove' node action. The fork removes the node(s) client-side
+    and returns their ids; we drop them from the curated display graph so the removal sticks across
+    reruns (and re-finalize, which also clears any orphans the removal creates). Removing edits the
+    display, which bumps its version -> a new component key, so the stale event is not reprocessed."""
+    ss = st.session_state
+    val = ss.get(component_key)
+    if not isinstance(val, dict) or val.get("action") != "remove":
+        return
+    node_ids = (val.get("data") or {}).get("node_ids") or []
+    present = [n for n in node_ids if graph.has_node(n)]
+    if not present:
+        return  # nothing to remove (stale/empty event) -> avoids a rerun loop
+    trimmed = nx.MultiDiGraph(graph)
+    trimmed.remove_nodes_from(present)
+    trimmed = finalize(trimmed, ss.chat_query_gene_curies)
+    ss.chat_display_graph.replace(trimmed)
+    ss.pop("_chat_graph_cache", None)
+    ss.pop("_chat_viz_cache", None)
+    ss.pop("_chat_full_cyjs", None)
+    logger.info("user removed %d node(s) from the view: %s", len(present), present)
+    st.rerun()
 
 
 def _handle_ai_summary(component_key: str, graph: Any) -> None:

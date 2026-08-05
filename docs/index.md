@@ -6,6 +6,7 @@
 :hidden:
 
 example.ipynb
+agent_loop.md
 changelog.md
 contributing.md
 conduct.md

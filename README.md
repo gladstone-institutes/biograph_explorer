@@ -29,7 +29,8 @@ Translator (TCT) queries and renders the result for you.
 - Actual-usage cost tracking with a per-session spend cap, plus a Stop button to interrupt and
   course-correct the agent mid-run (price varies by agent type but typical sessions should cost less than $3)
 
-The Chat Explorer requires an Anthropic API key (see [API Key](#api-key) below).
+The Chat Explorer requires an Anthropic API key (see [API Key](#api-key) below). How the agent works
+under the hood is documented in [docs/agent_loop.md](docs/agent_loop.md).
 
 ### Classic Explorer (no key required)
 
